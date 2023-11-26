@@ -1,0 +1,2761 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>
+<html lang='en' xml:lang='en' version='-//W3C//DTD XHTML 1.1//EN' xsi:schemaLocation='http://www.w3.org/1999/xhtml http://www.w3.org/MarkUp/SCHEMA/xhtml11.xsd' xmlns='http://www.w3.org/1999/xhtml' xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
+<head>
+  <title>Generate autounattend.xml files for Windows&#xA0;10/11</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <script type="text/javascript">'use strict';
+
+const ready = function () {
+    const textEvents = ['change', 'keyup', 'input', 'paste'];
+
+    const setValidity = function (elem, message, quiet) {
+        elem.setCustomValidity(message);
+        if (quiet !== true) {
+            elem.reportValidity();
+        }
+    }
+
+    const stopEventCascade = function (event) {
+        if (typeof (event.detail) === 'object') {
+            return event.detail.stop === true;
+        }
+        return false;
+    }
+
+    const newStoppingEvent = function () {
+        return new CustomEvent('change', {
+            detail: {
+                stop: true
+            }
+        });
+    };
+
+    const newChangeEvent = function () {
+        return new Event('change');
+    }
+
+    {
+        const locale = document.querySelector('select[name="UserLocale"]');
+        const keyboard = document.querySelector('select[name="KeyboardLayout"]');
+
+        locale.addEventListener('change', (event) => {
+            for (const option of event.target.selectedOptions) {
+                const data = option.dataset.keyboard;
+                if (data) {
+                    keyboard.value = data;
+                }
+            }
+        });
+        locale.dispatchEvent(newChangeEvent());
+    }
+    {
+        const join = function (master, slave) {
+            master.addEventListener('change', (event) => {
+                slave.disabled = !master.checked;
+            });
+            master.dispatchEvent(newChangeEvent());
+        };
+
+        join(
+            document.querySelector('input[name="ProcessAudit"]'),
+            document.querySelector('input[name="ProcessAuditCommandLine"]')
+        );
+        join(
+            document.querySelector('input[name="AutoLogonMode"][value="Builtin"]'),
+            document.querySelector('input[name="BuiltinAdministratorPassword"]')
+        );
+    }
+    {
+        const radios = document.querySelectorAll('input[type="radio"]');
+
+        const update = function (event) {
+            for (const radio of radios) {
+                const fieldset = radio.parentElement.querySelector('fieldset');
+                if (fieldset) {
+                    fieldset.disabled = !radio.checked;
+                }
+            }
+        }
+
+        for (const radio of radios) {
+            radio.addEventListener('change', update);
+            radio.dispatchEvent(newChangeEvent());
+        }
+    }
+    {
+        const admins = document.querySelectorAll('input[name="AutoLogonMode"][value="Builtin"], select[name^="AccountGroup"]');
+
+        const validate = function (event) {
+
+            const hasAdmin = function () {
+                for (const admin of admins) {
+                    if (!admin.disabled) {
+                        if (admin.checked === true || admin.value === 'Administrators') {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            const stop = stopEventCascade(event);
+            if (hasAdmin()) {
+                setValidity(event.target, '');
+            } else {
+                setValidity(event.target, 'You must create at least one account in the „Administrators“ group or activate the built-in „Administrator“ account.', stop);
+            }
+
+            if (!stop) {
+                for (const admin of admins) {
+                    admin.dispatchEvent(newStoppingEvent());
+                }
+            }
+        };
+
+        for (const admin of admins) {
+            admin.addEventListener('change', validate);
+        }
+        for (const admin of admins) {
+            admin.dispatchEvent(newChangeEvent());
+        }
+    }
+    {
+        const names = document.querySelectorAll('input[name^="AccountName"]');
+        const validate = function (event) {
+
+            const name = event.target;
+
+            const valid = function () {
+                const val = name.value;
+
+                if (val === '') {
+                    return true;
+                }
+                if (val.trim() === '') {
+                    return false;
+                }
+                if (val !== val.trim()) {
+                    return false;
+                }
+                if (val.length > 20) {
+                    return false;
+                }
+                {
+                    const existing = [
+                        'administrator',
+                        'guest',
+                        'defaultaccount',
+                        'system',
+                        'network service',
+                        'local service'
+                    ];
+                    if (existing.includes(val.toLowerCase())) {
+                        return false;
+                    }
+                }
+
+                for (const other of names) {
+                    if (other !== name) {
+                        if (other.value.toLowerCase() === val.toLowerCase()) {
+                            return false;
+                        }
+                    }
+                }
+
+                if (/\x2F|\x5C|\x5B|\x5D|\x3A|\x3B|\x7C|\x3D|\x2C|\x2B|\x2A|\x3F|\x3C|\x3E/.test(val)) {
+                    return false;
+                }
+                return true;
+            };
+
+            const stop = stopEventCascade(event);
+            const result = valid();
+            if (result === true) {
+                setValidity(name, '');
+            } else if (typeof (result) === 'string') {
+                setValidity(name, result);
+            } else {
+                setValidity(name, 'This account name is invalid.', stop);
+            }
+
+            if (!stop) {
+                for (const other of names) {
+                    other.dispatchEvent(newStoppingEvent());
+                }
+            }
+        };
+
+        const join = function (event) {
+            const name = event.target;
+            const hasValue = name.value !== '';
+            const tr = name.parentElement.parentElement;
+            {
+                const password = tr.querySelector('input[name^="AccountPassword"]');
+                password.disabled = !hasValue;
+            }
+            {
+                const group = tr.querySelector('select[name^="AccountGroup"]');
+                group.disabled = !hasValue;
+                group.dispatchEvent(newChangeEvent());
+            }
+        };
+
+        for (const name of names) {
+            for (const type of textEvents) {
+                name.addEventListener(type, validate);
+                name.addEventListener(type, join);
+            }
+        }
+        for (const name of names) {
+            name.dispatchEvent(newChangeEvent());
+        }
+    }
+    {
+        const elem = document.querySelector('select[name="ProcessorArchitecture"]');
+        elem.addEventListener('change', (event) => {
+            if (elem.selectedIndex === -1) {
+                setValidity(elem, 'You need to select at least one processor architecture.');
+            } else {
+                setValidity(elem, '');
+            }
+        });
+        elem.dispatchEvent(newChangeEvent());
+    }
+    {
+        const duration = document.querySelector('input[name="LockoutDuration"]');
+        const window = document.querySelector('input[name="LockoutWindow"]');
+
+        const number = function (elem) {
+            return parseInt(elem.value, 10);
+        }
+
+        const validate = function (event) {
+            const stop = stopEventCascade(event);
+            if (number(duration) >= number(window)) {
+                setValidity(event.target, '');
+            } else {
+                setValidity(event.target, `Lockout duration (${duration.value}) must be greater than or equal to lockout window (${window.value}).`, stop);
+            }
+            if (!stop) {
+                const other = event.target === duration ? window : duration;
+                other.dispatchEvent(newStoppingEvent());
+            }
+        };
+
+        for (const type of textEvents) {
+            duration.addEventListener(type, validate);
+            window.addEventListener(type, validate);
+        }
+    }
+    {
+        const elem = document.querySelector('input[name="ComputerName"]');
+
+        const validate = function (event) {
+            const valid = function () {
+                const val = elem.value;
+
+                if (val.trim() === '') {
+                    return true;
+                }
+
+                if (/\s|\x7B|\x7C|\x7D|\x7E|\x5B|\x5C|\x5D|\x5E|\x27|\x3A|\x3B|\x3C|\x3D|\x3E|\x3F|\x40|\x21|\x22|\x23|\x24|\x25|\x60|\x28|\x29|\x2B|\x2F|\x2E|\x2C|\x2A|\x26/.test(val)) {
+                    return false;
+                }
+
+                if (/^[0-9]+$/.test(val)) {
+                    return 'Computer name must not contain digits only.';
+                }
+
+                return true;
+            };
+
+            const result = valid();
+            if (result === true) {
+                setValidity(elem, '');
+            } else if (typeof (result) === 'string') {
+                setValidity(elem, result);
+            } else {
+                setValidity(elem, 'This computer name is invalid.');
+            }
+        };
+
+        for (const type of textEvents) {
+            elem.addEventListener(type, validate);
+        }
+    }
+    {
+        const auth = document.querySelector('select[name="WifiAuthentication"]');
+        const passwd = document.querySelector('input[name="WifiPassword"]');
+
+        auth.addEventListener('change', (event) => {
+            passwd.disabled = auth.value === 'Open';
+        });
+
+        auth.dispatchEvent(newChangeEvent());
+    }
+    {
+        const bloatwares = document.querySelectorAll('.Bloatwares input');
+
+        const set = function (event) {
+            for (const bloatware of bloatwares) {
+                bloatware.checked = this.checked;
+            }
+        };
+
+        document.querySelector('#SelectAllBloatwares').addEventListener('click', set.bind({ checked: true }));
+        document.querySelector('#DeselectAllBloatwares').addEventListener('click', set.bind({ checked: false }));
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ready);
+} else {
+    ready();
+}</script>
+  <style type="text/css">select {
+    width: 30em;
+}
+
+    select[name=WifiAuthentication], select[name=WindowsEdition] {
+        width: 25ch;
+    }
+
+    select[name^="AccountGroup"] {
+        width: 16ch;
+    }
+
+table, thead, tbody, tfoot, tr, th, td {
+    border: none;
+}
+
+label {
+    cursor: pointer;
+}
+
+.nowrap {
+    white-space: nowrap;
+}
+
+th {
+    text-align: left;
+    vertical-align: top;
+}
+
+td {
+    padding-bottom: 20px;
+    max-width: 75em;
+}
+
+div.Bloatwares label {
+    display: inline-block;
+    width: 32ch;
+}
+
+.Components {
+    max-height: 20em;
+    overflow: auto;
+    display: block;
+    border: 4px ridge;
+    padding: 5px;
+}
+
+    .Components dt {
+        margin-top: 10px;
+    }
+
+    .Components label {
+        white-space: nowrap;
+    }
+
+input[name=WifiPassword] {
+    width: 65ch;
+}
+
+@media (max-width: 650px) {
+    form > table, form > table > tr, form > tbody > table > tr, form > table > tr > th, form > table > tbody > tr > th, form > table > tr > td, form > table > tbody > tr > td {
+        display: block;
+    }
+
+    input[type=text], input[type=file], select, textarea {
+        width: 100%;
+    }
+}
+
+select:invalid, input:invalid {
+    box-shadow: 0 0 5px 2px red;
+}
+
+fieldset {
+    border: 0;
+    padding: 0;
+    padding-left: 2em;
+}
+
+td > p:first-child {
+    margin-top: 0;
+}
+
+.New::before, .Warning::before {
+    content: "⚠ ";
+    font-weight: normal;
+}
+
+label.flex-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    margin-bottom: 12px;
+}
+
+    label.flex-row > .flex-column {
+        display: inline-flex;
+        flex-direction: column;
+        padding-left: 10px;
+    }
+
+        label.flex-row > .flex-column > span:first-child {
+            margin-bottom: 6px;
+        }
+
+    label.flex-row fieldset {
+        padding-left: initial;
+    }
+
+dt {
+    margin-top: 1em;
+    margin-bottom: 0.3em;
+}
+
+dd {
+    margin-bottom: 0.8em;
+}
+
+li {
+    margin: 4px 0;
+}</style>
+</head>
+<body>
+  <div class="Header">
+    <h1>Generate <code>autounattend.xml</code> files for Windows 10/11</h1>
+      <p class="Breadcrumb">» <a href="/">schneegans.de</a></p>
+  </div>
+
+  
+<p>This service lets you create <a href="https://docs.microsoft.com/en-us/windows-hardware/manufacture/desktop/update-windows-settings-and-scripts-create-your-own-answer-file-sxs">answer files</a> (typically named <code>unattend.xml</code> or <code>autounattend.xml</code>) to perform <strong>unattended installations</strong> of Windows 10/11.</p>
+
+<form action="." method="get">
+
+  <table>
+    <tr>
+      <th>Region and language settings:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="LanguageMode" value="Unattended" checked="checked" />
+          <span class="flex-column">
+            <span>Install Windows using these language settings:</span>
+            <fieldset>
+              <dl>
+                <dt>Display menus, dialog boxes, etc. in this <strong>language</strong>, which must match the language of your Windows&#160;10/11 .iso file:</dt>
+                <dd>
+                  <select name="UILanguage">
+  <option value="ar-SA" title="ar-SA">Arabic</option>
+  <option value="pt-BR" title="pt-BR">Brazilian Portuguese</option>
+  <option value="bg-BG" title="bg-BG">Bulgarian</option>
+  <option value="zh-Hans-CN" title="zh-Hans-CN">Chinese Simplified</option>
+  <option value="zh-Hant-CN" title="zh-Hant-CN">Chinese Traditional</option>
+  <option value="hr-HR" title="hr-HR">Croatian</option>
+  <option value="cs-CZ" title="cs-CZ">Czech</option>
+  <option value="da-DK" title="da-DK">Danish</option>
+  <option value="nl-NL" title="nl-NL">Dutch</option>
+  <option value="en-US" title="en-US" selected="selected">English</option>
+  <option value="en-GB" title="en-GB">English International</option>
+  <option value="et-EE" title="et-EE">Estonian</option>
+  <option value="fi-FI" title="fi-FI">Finnish</option>
+  <option value="fr-FR" title="fr-FR">French</option>
+  <option value="fr-CA" title="fr-CA">French Canadian</option>
+  <option value="de-DE" title="de-DE">German</option>
+  <option value="el-GR" title="el-GR">Greek</option>
+  <option value="he-IL" title="he-IL">Hebrew</option>
+  <option value="hu-HU" title="hu-HU">Hungarian</option>
+  <option value="it-IT" title="it-IT">Italian</option>
+  <option value="ja-JP" title="ja-JP">Japanese</option>
+  <option value="ko-KR" title="ko-KR">Korean</option>
+  <option value="lv-LV" title="lv-LV">Latvian</option>
+  <option value="lt-LT" title="lt-LT">Lithuanian</option>
+  <option value="nb-NO" title="nb-NO">Norwegian</option>
+  <option value="pl-PL" title="pl-PL">Polish</option>
+  <option value="pt-PT" title="pt-PT">Portuguese</option>
+  <option value="ro-RO" title="ro-RO">Romanian</option>
+  <option value="ru-RU" title="ru-RU">Russian</option>
+  <option value="sr-Latn-RS" title="sr-Latn-RS">Serbian Latin</option>
+  <option value="sk-SK" title="sk-SK">Slovak</option>
+  <option value="sl-SI" title="sl-SI">Slovenian</option>
+  <option value="es-ES" title="es-ES">Spanish</option>
+  <option value="es-MX" title="es-MX">Spanish (Mexico)</option>
+  <option value="sv-SE" title="sv-SE">Swedish</option>
+  <option value="th-TH" title="th-TH">Thai</option>
+  <option value="tr-TR" title="tr-TR">Turkish</option>
+  <option value="uk-UA" title="uk-UA">Ukrainian</option>
+</select>
+                </dd>
+                <dt>Format dates, times, currency, and numbers according to this <strong>locale/culture</strong>:</dt>
+                <dd>
+                  <select name="UserLocale">
+  <option value="aa-DJ" title="aa-DJ">Afar (Djibouti)</option>
+  <option value="aa-ER" title="aa-ER">Afar (Eritrea)</option>
+  <option value="aa-ET" title="aa-ET">Afar (Ethiopia)</option>
+  <option value="af-NA" title="af-NA">Afrikaans (Namibia)</option>
+  <option value="af-ZA" title="af-ZA">Afrikaans (South Africa)</option>
+  <option value="agq-CM" title="agq-CM">Aghem (Cameroon)</option>
+  <option value="ak-GH" title="ak-GH">Akan (Ghana)</option>
+  <option value="sq-AL" title="sq-AL" data-keyboard="041c:0000041c">Albanian (Albania)</option>
+  <option value="sq-XK" title="sq-XK" data-keyboard="041c:0000041c">Albanian (Kosovo)</option>
+  <option value="sq-MK" title="sq-MK" data-keyboard="041c:0000041c">Albanian (North Macedonia)</option>
+  <option value="am-ET" title="am-ET">Amharic (Ethiopia)</option>
+  <option value="ar-DZ" title="ar-DZ" data-keyboard="0401:00000401">Arabic (Algeria)</option>
+  <option value="ar-BH" title="ar-BH" data-keyboard="0401:00000401">Arabic (Bahrain)</option>
+  <option value="ar-TD" title="ar-TD" data-keyboard="0401:00000401">Arabic (Chad)</option>
+  <option value="ar-KM" title="ar-KM" data-keyboard="0401:00000401">Arabic (Comoros)</option>
+  <option value="ar-DJ" title="ar-DJ" data-keyboard="0401:00000401">Arabic (Djibouti)</option>
+  <option value="ar-EG" title="ar-EG" data-keyboard="0401:00000401">Arabic (Egypt)</option>
+  <option value="ar-ER" title="ar-ER" data-keyboard="0401:00000401">Arabic (Eritrea)</option>
+  <option value="ar-IQ" title="ar-IQ" data-keyboard="0401:00000401">Arabic (Iraq)</option>
+  <option value="ar-IL" title="ar-IL" data-keyboard="0401:00000401">Arabic (Israel)</option>
+  <option value="ar-JO" title="ar-JO" data-keyboard="0401:00000401">Arabic (Jordan)</option>
+  <option value="ar-KW" title="ar-KW" data-keyboard="0401:00000401">Arabic (Kuwait)</option>
+  <option value="ar-LB" title="ar-LB" data-keyboard="0401:00000401">Arabic (Lebanon)</option>
+  <option value="ar-LY" title="ar-LY" data-keyboard="0401:00000401">Arabic (Libya)</option>
+  <option value="ar-MR" title="ar-MR" data-keyboard="0401:00000401">Arabic (Mauritania)</option>
+  <option value="ar-MA" title="ar-MA" data-keyboard="0401:00000401">Arabic (Morocco)</option>
+  <option value="ar-OM" title="ar-OM" data-keyboard="0401:00000401">Arabic (Oman)</option>
+  <option value="ar-PS" title="ar-PS" data-keyboard="0401:00000401">Arabic (Palestinian Authority)</option>
+  <option value="ar-QA" title="ar-QA" data-keyboard="0401:00000401">Arabic (Qatar)</option>
+  <option value="ar-SA" title="ar-SA" data-keyboard="0401:00000401">Arabic (Saudi Arabia)</option>
+  <option value="ar-SO" title="ar-SO" data-keyboard="0401:00000401">Arabic (Somalia)</option>
+  <option value="ar-SS" title="ar-SS" data-keyboard="0401:00000401">Arabic (South Sudan)</option>
+  <option value="ar-SD" title="ar-SD" data-keyboard="0401:00000401">Arabic (Sudan)</option>
+  <option value="ar-SY" title="ar-SY" data-keyboard="0401:00000401">Arabic (Syria)</option>
+  <option value="ar-TN" title="ar-TN" data-keyboard="0401:00000401">Arabic (Tunisia)</option>
+  <option value="ar-AE" title="ar-AE" data-keyboard="0401:00000401">Arabic (United Arab Emirates)</option>
+  <option value="ar-001" title="ar-001" data-keyboard="0401:00000401">Arabic (World)</option>
+  <option value="ar-YE" title="ar-YE" data-keyboard="0401:00000401">Arabic (Yemen)</option>
+  <option value="hy-AM" title="hy-AM" data-keyboard="042b:0000042b">Armenian (Armenia)</option>
+  <option value="as-IN" title="as-IN" data-keyboard="044d:0000044d">Assamese (India)</option>
+  <option value="ast-ES" title="ast-ES">Asturian (Spain)</option>
+  <option value="asa-TZ" title="asa-TZ">Asu (Tanzania)</option>
+  <option value="az-Cyrl-AZ" title="az-Cyrl-AZ" data-keyboard="082c:0000082c">Azerbaijani (Cyrillic, Azerbaijan)</option>
+  <option value="az-Latn-AZ" title="az-Latn-AZ" data-keyboard="042c:0000042c">Azerbaijani (Latin, Azerbaijan)</option>
+  <option value="ksf-CM" title="ksf-CM">Bafia (Cameroon)</option>
+  <option value="bm-Latn-ML" title="bm-Latn-ML">Bamanankan (Latin, Mali)</option>
+  <option value="bn-BD" title="bn-BD" data-keyboard="0445:00000445">Bangla (Bangladesh)</option>
+  <option value="bn-IN" title="bn-IN" data-keyboard="0445:00000445">Bangla (India)</option>
+  <option value="bas-CM" title="bas-CM">Basaa (Cameroon)</option>
+  <option value="ba-RU" title="ba-RU" data-keyboard="046d:0000046d">Bashkir (Russia)</option>
+  <option value="eu-ES" title="eu-ES">Basque (Spain)</option>
+  <option value="be-BY" title="be-BY" data-keyboard="0423:00000423">Belarusian (Belarus)</option>
+  <option value="bem-ZM" title="bem-ZM">Bemba (Zambia)</option>
+  <option value="bez-TZ" title="bez-TZ">Bena (Tanzania)</option>
+  <option value="byn-ER" title="byn-ER">Blin (Eritrea)</option>
+  <option value="brx-IN" title="brx-IN">Bodo (India)</option>
+  <option value="bs-Cyrl-BA" title="bs-Cyrl-BA" data-keyboard="201a:0000201a">Bosnian (Cyrillic, Bosnia &amp; Herzegovina)</option>
+  <option value="bs-Latn-BA" title="bs-Latn-BA">Bosnian (Latin, Bosnia &amp; Herzegovina)</option>
+  <option value="br-FR" title="br-FR">Breton (France)</option>
+  <option value="bg-BG" title="bg-BG" data-keyboard="0402:00000402">Bulgarian (Bulgaria)</option>
+  <option value="my-MM" title="my-MM">Burmese (Myanmar)</option>
+  <option value="ca-AD" title="ca-AD">Catalan (Andorra)</option>
+  <option value="ca-FR" title="ca-FR">Catalan (France)</option>
+  <option value="ca-IT" title="ca-IT">Catalan (Italy)</option>
+  <option value="ca-ES-valencia" title="ca-ES-valencia">Catalan (Spain, Valencian)</option>
+  <option value="ca-ES" title="ca-ES">Catalan (Spain)</option>
+  <option value="ceb-Latn-PH" title="ceb-Latn-PH">Cebuano (Latin, Philippines)</option>
+  <option value="tzm-Latn-MA" title="tzm-Latn-MA">Central Atlas Tamazight (Latin, Morocco)</option>
+  <option value="ccp-Cakm-BD" title="ccp-Cakm-BD">Chakma (Chakma, Bangladesh)</option>
+  <option value="ccp-Cakm-IN" title="ccp-Cakm-IN">Chakma (Chakma, India)</option>
+  <option value="ce-RU" title="ce-RU">Chechen (Russia)</option>
+  <option value="chr-Cher-US" title="chr-Cher-US" data-keyboard="045c:0000045c">Cherokee (Cherokee, United States)</option>
+  <option value="cgg-UG" title="cgg-UG">Chiga (Uganda)</option>
+  <option value="zh-CN" title="zh-CN" data-keyboard="0804:00000804">Chinese (China)</option>
+  <option value="zh-HK" title="zh-HK" data-keyboard="0c04:00000c04">Chinese (Hong Kong SAR)</option>
+  <option value="zh-MO" title="zh-MO" data-keyboard="1404:00001404">Chinese (Macao SAR)</option>
+  <option value="zh-Hans-HK" title="zh-Hans-HK" data-keyboard="0804:00000804">Chinese (Simplified, Hong Kong SAR)</option>
+  <option value="zh-Hans-MO" title="zh-Hans-MO" data-keyboard="0804:00000804">Chinese (Simplified, Macao SAR)</option>
+  <option value="zh-SG" title="zh-SG" data-keyboard="1004:00001004">Chinese (Singapore)</option>
+  <option value="zh-TW" title="zh-TW" data-keyboard="0404:00000404">Chinese (Taiwan)</option>
+  <option value="cu-RU" title="cu-RU">Church Slavic (Russia)</option>
+  <option value="ksh-DE" title="ksh-DE">Colognian (Germany)</option>
+  <option value="kw-GB" title="kw-GB">Cornish (United Kingdom)</option>
+  <option value="co-FR" title="co-FR">Corsican (France)</option>
+  <option value="hr-BA" title="hr-BA" data-keyboard="041a:0000041a">Croatian (Bosnia &amp; Herzegovina)</option>
+  <option value="hr-HR" title="hr-HR" data-keyboard="041a:0000041a">Croatian (Croatia)</option>
+  <option value="cs-CZ" title="cs-CZ" data-keyboard="0405:00000405">Czech (Czechia)</option>
+  <option value="da-DK" title="da-DK" data-keyboard="0406:00000406">Danish (Denmark)</option>
+  <option value="da-GL" title="da-GL" data-keyboard="0406:00000406">Danish (Greenland)</option>
+  <option value="dv-MV" title="dv-MV" data-keyboard="0465:00000465">Divehi (Maldives)</option>
+  <option value="dua-CM" title="dua-CM">Duala (Cameroon)</option>
+  <option value="nl-AW" title="nl-AW" data-keyboard="0413:00000413">Dutch (Aruba)</option>
+  <option value="nl-BE" title="nl-BE" data-keyboard="0813:00000813">Dutch (Belgium)</option>
+  <option value="nl-BQ" title="nl-BQ" data-keyboard="0413:00000413">Dutch (Bonaire, Sint Eustatius and Saba)</option>
+  <option value="nl-CW" title="nl-CW" data-keyboard="0413:00000413">Dutch (Curaçao)</option>
+  <option value="nl-NL" title="nl-NL" data-keyboard="0413:00000413">Dutch (Netherlands)</option>
+  <option value="nl-SX" title="nl-SX" data-keyboard="0413:00000413">Dutch (Sint Maarten)</option>
+  <option value="nl-SR" title="nl-SR" data-keyboard="0413:00000413">Dutch (Suriname)</option>
+  <option value="dz-BT" title="dz-BT" data-keyboard="0c51:00000c51">Dzongkha (Bhutan)</option>
+  <option value="ebu-KE" title="ebu-KE">Embu (Kenya)</option>
+  <option value="en-AS" title="en-AS" data-keyboard="0409:00000409">English (American Samoa)</option>
+  <option value="en-AI" title="en-AI" data-keyboard="0409:00000409">English (Anguilla)</option>
+  <option value="en-AG" title="en-AG" data-keyboard="0409:00000409">English (Antigua &amp; Barbuda)</option>
+  <option value="en-AU" title="en-AU" data-keyboard="0409:00000409">English (Australia)</option>
+  <option value="en-AT" title="en-AT" data-keyboard="0409:00000409">English (Austria)</option>
+  <option value="en-BS" title="en-BS" data-keyboard="0409:00000409">English (Bahamas)</option>
+  <option value="en-BB" title="en-BB" data-keyboard="0409:00000409">English (Barbados)</option>
+  <option value="en-BE" title="en-BE" data-keyboard="0409:00000409">English (Belgium)</option>
+  <option value="en-BZ" title="en-BZ" data-keyboard="0409:00000409">English (Belize)</option>
+  <option value="en-BM" title="en-BM" data-keyboard="0409:00000409">English (Bermuda)</option>
+  <option value="en-BW" title="en-BW" data-keyboard="0409:00000409">English (Botswana)</option>
+  <option value="en-IO" title="en-IO" data-keyboard="0409:00000409">English (British Indian Ocean Territory)</option>
+  <option value="en-VG" title="en-VG" data-keyboard="0409:00000409">English (British Virgin Islands)</option>
+  <option value="en-BI" title="en-BI" data-keyboard="0409:00000409">English (Burundi)</option>
+  <option value="en-CM" title="en-CM" data-keyboard="0409:00000409">English (Cameroon)</option>
+  <option value="en-CA" title="en-CA" data-keyboard="1009:00001009">English (Canada)</option>
+  <option value="en-KY" title="en-KY" data-keyboard="0409:00000409">English (Cayman Islands)</option>
+  <option value="en-CX" title="en-CX" data-keyboard="0409:00000409">English (Christmas Island)</option>
+  <option value="en-CC" title="en-CC" data-keyboard="0409:00000409">English (Cocos [Keeling] Islands)</option>
+  <option value="en-CK" title="en-CK" data-keyboard="0409:00000409">English (Cook Islands)</option>
+  <option value="en-CY" title="en-CY" data-keyboard="0409:00000409">English (Cyprus)</option>
+  <option value="en-DK" title="en-DK" data-keyboard="0409:00000409">English (Denmark)</option>
+  <option value="en-DM" title="en-DM" data-keyboard="0409:00000409">English (Dominica)</option>
+  <option value="en-ER" title="en-ER" data-keyboard="0409:00000409">English (Eritrea)</option>
+  <option value="en-SZ" title="en-SZ" data-keyboard="0409:00000409">English (Eswatini)</option>
+  <option value="en-150" title="en-150" data-keyboard="0409:00000409">English (Europe)</option>
+  <option value="en-FK" title="en-FK" data-keyboard="0409:00000409">English (Falkland Islands)</option>
+  <option value="en-FJ" title="en-FJ" data-keyboard="0409:00000409">English (Fiji)</option>
+  <option value="en-FI" title="en-FI" data-keyboard="0409:00000409">English (Finland)</option>
+  <option value="en-GM" title="en-GM" data-keyboard="0409:00000409">English (Gambia)</option>
+  <option value="en-DE" title="en-DE" data-keyboard="0409:00000409">English (Germany)</option>
+  <option value="en-GH" title="en-GH" data-keyboard="0409:00000409">English (Ghana)</option>
+  <option value="en-GI" title="en-GI" data-keyboard="0409:00000409">English (Gibraltar)</option>
+  <option value="en-GD" title="en-GD" data-keyboard="0409:00000409">English (Grenada)</option>
+  <option value="en-GU" title="en-GU" data-keyboard="0409:00000409">English (Guam)</option>
+  <option value="en-GG" title="en-GG" data-keyboard="0409:00000409">English (Guernsey)</option>
+  <option value="en-GY" title="en-GY" data-keyboard="0409:00000409">English (Guyana)</option>
+  <option value="en-HK" title="en-HK" data-keyboard="0409:00000409">English (Hong Kong SAR)</option>
+  <option value="en-IN" title="en-IN" data-keyboard="4009:00004009">English (India)</option>
+  <option value="en-IE" title="en-IE" data-keyboard="1809:00001809">English (Ireland)</option>
+  <option value="en-IM" title="en-IM" data-keyboard="0409:00000409">English (Isle of Man)</option>
+  <option value="en-IL" title="en-IL" data-keyboard="0409:00000409">English (Israel)</option>
+  <option value="en-JM" title="en-JM" data-keyboard="0409:00000409">English (Jamaica)</option>
+  <option value="en-JE" title="en-JE" data-keyboard="0409:00000409">English (Jersey)</option>
+  <option value="en-KE" title="en-KE" data-keyboard="0409:00000409">English (Kenya)</option>
+  <option value="en-KI" title="en-KI" data-keyboard="0409:00000409">English (Kiribati)</option>
+  <option value="en-LS" title="en-LS" data-keyboard="0409:00000409">English (Lesotho)</option>
+  <option value="en-LR" title="en-LR" data-keyboard="0409:00000409">English (Liberia)</option>
+  <option value="en-MO" title="en-MO" data-keyboard="0409:00000409">English (Macao SAR)</option>
+  <option value="en-MG" title="en-MG" data-keyboard="0409:00000409">English (Madagascar)</option>
+  <option value="en-MW" title="en-MW" data-keyboard="0409:00000409">English (Malawi)</option>
+  <option value="en-MY" title="en-MY" data-keyboard="0409:00000409">English (Malaysia)</option>
+  <option value="en-MT" title="en-MT" data-keyboard="0409:00000409">English (Malta)</option>
+  <option value="en-MH" title="en-MH" data-keyboard="0409:00000409">English (Marshall Islands)</option>
+  <option value="en-MU" title="en-MU" data-keyboard="0409:00000409">English (Mauritius)</option>
+  <option value="en-FM" title="en-FM" data-keyboard="0409:00000409">English (Micronesia)</option>
+  <option value="en-MS" title="en-MS" data-keyboard="0409:00000409">English (Montserrat)</option>
+  <option value="en-NA" title="en-NA" data-keyboard="0409:00000409">English (Namibia)</option>
+  <option value="en-NR" title="en-NR" data-keyboard="0409:00000409">English (Nauru)</option>
+  <option value="en-NL" title="en-NL" data-keyboard="0409:00000409">English (Netherlands)</option>
+  <option value="en-NZ" title="en-NZ" data-keyboard="0409:00000409">English (New Zealand)</option>
+  <option value="en-NG" title="en-NG" data-keyboard="0409:00000409">English (Nigeria)</option>
+  <option value="en-NU" title="en-NU" data-keyboard="0409:00000409">English (Niue)</option>
+  <option value="en-NF" title="en-NF" data-keyboard="0409:00000409">English (Norfolk Island)</option>
+  <option value="en-MP" title="en-MP" data-keyboard="0409:00000409">English (Northern Mariana Islands)</option>
+  <option value="en-PK" title="en-PK" data-keyboard="0409:00000409">English (Pakistan)</option>
+  <option value="en-PW" title="en-PW" data-keyboard="0409:00000409">English (Palau)</option>
+  <option value="en-PG" title="en-PG" data-keyboard="0409:00000409">English (Papua New Guinea)</option>
+  <option value="en-PH" title="en-PH" data-keyboard="0409:00000409">English (Philippines)</option>
+  <option value="en-PN" title="en-PN" data-keyboard="0409:00000409">English (Pitcairn Islands)</option>
+  <option value="en-PR" title="en-PR" data-keyboard="0409:00000409">English (Puerto Rico)</option>
+  <option value="en-RW" title="en-RW" data-keyboard="0409:00000409">English (Rwanda)</option>
+  <option value="en-WS" title="en-WS" data-keyboard="0409:00000409">English (Samoa)</option>
+  <option value="en-SC" title="en-SC" data-keyboard="0409:00000409">English (Seychelles)</option>
+  <option value="en-SL" title="en-SL" data-keyboard="0409:00000409">English (Sierra Leone)</option>
+  <option value="en-SG" title="en-SG" data-keyboard="0409:00000409">English (Singapore)</option>
+  <option value="en-SX" title="en-SX" data-keyboard="0409:00000409">English (Sint Maarten)</option>
+  <option value="en-SI" title="en-SI" data-keyboard="0409:00000409">English (Slovenia)</option>
+  <option value="en-SB" title="en-SB" data-keyboard="0409:00000409">English (Solomon Islands)</option>
+  <option value="en-ZA" title="en-ZA" data-keyboard="0409:00000409">English (South Africa)</option>
+  <option value="en-SS" title="en-SS" data-keyboard="0409:00000409">English (South Sudan)</option>
+  <option value="en-SH" title="en-SH" data-keyboard="0409:00000409">English (St Helena, Ascension, Tristan da Cunha)</option>
+  <option value="en-KN" title="en-KN" data-keyboard="0409:00000409">English (St. Kitts &amp; Nevis)</option>
+  <option value="en-LC" title="en-LC" data-keyboard="0409:00000409">English (St. Lucia)</option>
+  <option value="en-VC" title="en-VC" data-keyboard="0409:00000409">English (St. Vincent &amp; Grenadines)</option>
+  <option value="en-SD" title="en-SD" data-keyboard="0409:00000409">English (Sudan)</option>
+  <option value="en-SE" title="en-SE" data-keyboard="0409:00000409">English (Sweden)</option>
+  <option value="en-CH" title="en-CH" data-keyboard="0409:00000409">English (Switzerland)</option>
+  <option value="en-TZ" title="en-TZ" data-keyboard="0409:00000409">English (Tanzania)</option>
+  <option value="en-TK" title="en-TK" data-keyboard="0409:00000409">English (Tokelau)</option>
+  <option value="en-TO" title="en-TO" data-keyboard="0409:00000409">English (Tonga)</option>
+  <option value="en-TT" title="en-TT" data-keyboard="0409:00000409">English (Trinidad &amp; Tobago)</option>
+  <option value="en-TC" title="en-TC" data-keyboard="0409:00000409">English (Turks &amp; Caicos Islands)</option>
+  <option value="en-TV" title="en-TV" data-keyboard="0409:00000409">English (Tuvalu)</option>
+  <option value="en-UM" title="en-UM" data-keyboard="0409:00000409">English (U.S. Outlying Islands)</option>
+  <option value="en-VI" title="en-VI" data-keyboard="0409:00000409">English (U.S. Virgin Islands)</option>
+  <option value="en-UG" title="en-UG" data-keyboard="0409:00000409">English (Uganda)</option>
+  <option value="en-AE" title="en-AE" data-keyboard="0409:00000409">English (United Arab Emirates)</option>
+  <option value="en-GB" title="en-GB" data-keyboard="0809:00000809">English (United Kingdom)</option>
+  <option value="en-US-posix" title="en-US-posix" data-keyboard="0409:00000409">English (United States, Computer)</option>
+  <option value="en-US" title="en-US" selected="selected" data-keyboard="0409:00000409">English (United States)</option>
+  <option value="en-VU" title="en-VU" data-keyboard="0409:00000409">English (Vanuatu)</option>
+  <option value="en-001" title="en-001" data-keyboard="0409:00000409">English (World)</option>
+  <option value="en-ZM" title="en-ZM" data-keyboard="0409:00000409">English (Zambia)</option>
+  <option value="en-ZW" title="en-ZW" data-keyboard="0409:00000409">English (Zimbabwe)</option>
+  <option value="eo-001" title="eo-001">Esperanto (World)</option>
+  <option value="et-EE" title="et-EE" data-keyboard="0425:00000425">Estonian (Estonia)</option>
+  <option value="ee-GH" title="ee-GH">Ewe (Ghana)</option>
+  <option value="ee-TG" title="ee-TG">Ewe (Togo)</option>
+  <option value="ewo-CM" title="ewo-CM">Ewondo (Cameroon)</option>
+  <option value="fo-DK" title="fo-DK" data-keyboard="0438:00000438">Faroese (Denmark)</option>
+  <option value="fo-FO" title="fo-FO" data-keyboard="0438:00000438">Faroese (Faroe Islands)</option>
+  <option value="fil-PH" title="fil-PH">Filipino (Philippines)</option>
+  <option value="fi-FI" title="fi-FI" data-keyboard="040b:0000040b">Finnish (Finland)</option>
+  <option value="fr-DZ" title="fr-DZ" data-keyboard="040c:0000040c">French (Algeria)</option>
+  <option value="fr-BE" title="fr-BE" data-keyboard="080c:0000080c">French (Belgium)</option>
+  <option value="fr-BJ" title="fr-BJ" data-keyboard="040c:0000040c">French (Benin)</option>
+  <option value="fr-BF" title="fr-BF" data-keyboard="040c:0000040c">French (Burkina Faso)</option>
+  <option value="fr-BI" title="fr-BI" data-keyboard="040c:0000040c">French (Burundi)</option>
+  <option value="fr-CM" title="fr-CM" data-keyboard="040c:0000040c">French (Cameroon)</option>
+  <option value="fr-CA" title="fr-CA" data-keyboard="0c0c:00000c0c">French (Canada)</option>
+  <option value="fr-CF" title="fr-CF" data-keyboard="040c:0000040c">French (Central African Republic)</option>
+  <option value="fr-TD" title="fr-TD" data-keyboard="040c:0000040c">French (Chad)</option>
+  <option value="fr-KM" title="fr-KM" data-keyboard="040c:0000040c">French (Comoros)</option>
+  <option value="fr-CD" title="fr-CD" data-keyboard="040c:0000040c">French (Congo [DRC])</option>
+  <option value="fr-CG" title="fr-CG" data-keyboard="040c:0000040c">French (Congo)</option>
+  <option value="fr-CI" title="fr-CI" data-keyboard="040c:0000040c">French (Côte d’Ivoire)</option>
+  <option value="fr-DJ" title="fr-DJ" data-keyboard="040c:0000040c">French (Djibouti)</option>
+  <option value="fr-GQ" title="fr-GQ" data-keyboard="040c:0000040c">French (Equatorial Guinea)</option>
+  <option value="fr-FR" title="fr-FR" data-keyboard="040c:0000040c">French (France)</option>
+  <option value="fr-GF" title="fr-GF" data-keyboard="040c:0000040c">French (French Guiana)</option>
+  <option value="fr-PF" title="fr-PF" data-keyboard="040c:0000040c">French (French Polynesia)</option>
+  <option value="fr-GA" title="fr-GA" data-keyboard="040c:0000040c">French (Gabon)</option>
+  <option value="fr-GP" title="fr-GP" data-keyboard="040c:0000040c">French (Guadeloupe)</option>
+  <option value="fr-GN" title="fr-GN" data-keyboard="040c:0000040c">French (Guinea)</option>
+  <option value="fr-HT" title="fr-HT" data-keyboard="040c:0000040c">French (Haiti)</option>
+  <option value="fr-LU" title="fr-LU" data-keyboard="040c:0000040c">French (Luxembourg)</option>
+  <option value="fr-MG" title="fr-MG" data-keyboard="040c:0000040c">French (Madagascar)</option>
+  <option value="fr-ML" title="fr-ML" data-keyboard="040c:0000040c">French (Mali)</option>
+  <option value="fr-MQ" title="fr-MQ" data-keyboard="040c:0000040c">French (Martinique)</option>
+  <option value="fr-MR" title="fr-MR" data-keyboard="040c:0000040c">French (Mauritania)</option>
+  <option value="fr-MU" title="fr-MU" data-keyboard="040c:0000040c">French (Mauritius)</option>
+  <option value="fr-YT" title="fr-YT" data-keyboard="040c:0000040c">French (Mayotte)</option>
+  <option value="fr-MC" title="fr-MC" data-keyboard="040c:0000040c">French (Monaco)</option>
+  <option value="fr-MA" title="fr-MA" data-keyboard="040c:0000040c">French (Morocco)</option>
+  <option value="fr-NC" title="fr-NC" data-keyboard="040c:0000040c">French (New Caledonia)</option>
+  <option value="fr-NE" title="fr-NE" data-keyboard="040c:0000040c">French (Niger)</option>
+  <option value="fr-RE" title="fr-RE" data-keyboard="040c:0000040c">French (Réunion)</option>
+  <option value="fr-RW" title="fr-RW" data-keyboard="040c:0000040c">French (Rwanda)</option>
+  <option value="fr-SN" title="fr-SN" data-keyboard="040c:0000040c">French (Senegal)</option>
+  <option value="fr-SC" title="fr-SC" data-keyboard="040c:0000040c">French (Seychelles)</option>
+  <option value="fr-BL" title="fr-BL" data-keyboard="040c:0000040c">French (St. Barthélemy)</option>
+  <option value="fr-MF" title="fr-MF" data-keyboard="040c:0000040c">French (St. Martin)</option>
+  <option value="fr-PM" title="fr-PM" data-keyboard="040c:0000040c">French (St. Pierre &amp; Miquelon)</option>
+  <option value="fr-CH" title="fr-CH" data-keyboard="100c:0000100c">French (Switzerland)</option>
+  <option value="fr-SY" title="fr-SY" data-keyboard="040c:0000040c">French (Syria)</option>
+  <option value="fr-TG" title="fr-TG" data-keyboard="040c:0000040c">French (Togo)</option>
+  <option value="fr-TN" title="fr-TN" data-keyboard="040c:0000040c">French (Tunisia)</option>
+  <option value="fr-VU" title="fr-VU" data-keyboard="040c:0000040c">French (Vanuatu)</option>
+  <option value="fr-WF" title="fr-WF" data-keyboard="040c:0000040c">French (Wallis &amp; Futuna)</option>
+  <option value="fur-IT" title="fur-IT">Friulian (Italy)</option>
+  <option value="ff-Latn-BF" title="ff-Latn-BF">Fulah (Latin, Burkina Faso)</option>
+  <option value="ff-Latn-CM" title="ff-Latn-CM">Fulah (Latin, Cameroon)</option>
+  <option value="ff-Latn-GM" title="ff-Latn-GM">Fulah (Latin, Gambia)</option>
+  <option value="ff-Latn-GH" title="ff-Latn-GH">Fulah (Latin, Ghana)</option>
+  <option value="ff-Latn-GW" title="ff-Latn-GW">Fulah (Latin, Guinea-Bissau)</option>
+  <option value="ff-Latn-GN" title="ff-Latn-GN">Fulah (Latin, Guinea)</option>
+  <option value="ff-Latn-LR" title="ff-Latn-LR">Fulah (Latin, Liberia)</option>
+  <option value="ff-Latn-MR" title="ff-Latn-MR">Fulah (Latin, Mauritania)</option>
+  <option value="ff-Latn-NE" title="ff-Latn-NE">Fulah (Latin, Niger)</option>
+  <option value="ff-Latn-NG" title="ff-Latn-NG">Fulah (Latin, Nigeria)</option>
+  <option value="ff-Latn-SN" title="ff-Latn-SN">Fulah (Latin, Senegal)</option>
+  <option value="ff-Latn-SL" title="ff-Latn-SL">Fulah (Latin, Sierra Leone)</option>
+  <option value="gl-ES" title="gl-ES">Galician (Spain)</option>
+  <option value="lg-UG" title="lg-UG">Ganda (Uganda)</option>
+  <option value="ka-GE" title="ka-GE" data-keyboard="0437:00000437">Georgian (Georgia)</option>
+  <option value="de-AT" title="de-AT" data-keyboard="0407:00000407">German (Austria)</option>
+  <option value="de-BE" title="de-BE" data-keyboard="0407:00000407">German (Belgium)</option>
+  <option value="de-DE" title="de-DE" data-keyboard="0407:00000407">German (Germany)</option>
+  <option value="de-IT" title="de-IT" data-keyboard="0407:00000407">German (Italy)</option>
+  <option value="de-LI" title="de-LI" data-keyboard="0407:00000407">German (Liechtenstein)</option>
+  <option value="de-LU" title="de-LU" data-keyboard="0407:00000407">German (Luxembourg)</option>
+  <option value="de-CH" title="de-CH" data-keyboard="0807:00000807">German (Switzerland)</option>
+  <option value="el-CY" title="el-CY" data-keyboard="0408:00000408">Greek (Cyprus)</option>
+  <option value="el-GR" title="el-GR" data-keyboard="0408:00000408">Greek (Greece)</option>
+  <option value="gn-PY" title="gn-PY" data-keyboard="0474:00000474">Guarani (Paraguay)</option>
+  <option value="gu-IN" title="gu-IN" data-keyboard="0447:00000447">Gujarati (India)</option>
+  <option value="guz-KE" title="guz-KE">Gusii (Kenya)</option>
+  <option value="ha-Latn-GH" title="ha-Latn-GH" data-keyboard="0468:00000468">Hausa (Latin, Ghana)</option>
+  <option value="ha-Latn-NE" title="ha-Latn-NE" data-keyboard="0468:00000468">Hausa (Latin, Niger)</option>
+  <option value="ha-Latn-NG" title="ha-Latn-NG" data-keyboard="0468:00000468">Hausa (Latin, Nigeria)</option>
+  <option value="haw-US" title="haw-US" data-keyboard="0475:00000475">Hawaiian (United States)</option>
+  <option value="he-IL" title="he-IL" data-keyboard="040d:0000040d">Hebrew (Israel)</option>
+  <option value="hi-IN" title="hi-IN" data-keyboard="0439:00000439">Hindi (India)</option>
+  <option value="hu-HU" title="hu-HU" data-keyboard="040e:0000040e">Hungarian (Hungary)</option>
+  <option value="is-IS" title="is-IS" data-keyboard="040f:0000040f">Icelandic (Iceland)</option>
+  <option value="ig-NG" title="ig-NG" data-keyboard="0470:00000470">Igbo (Nigeria)</option>
+  <option value="smn-FI" title="smn-FI">Inari Sami (Finland)</option>
+  <option value="id-ID" title="id-ID">Indonesian (Indonesia)</option>
+  <option value="ia-001" title="ia-001">Interlingua (World)</option>
+  <option value="iu-CA" title="iu-CA">Inuktitut (Canada)</option>
+  <option value="iu-Latn-CA" title="iu-Latn-CA" data-keyboard="085d:0000085d">Inuktitut (Latin, Canada)</option>
+  <option value="ga-IE" title="ga-IE">Irish (Ireland)</option>
+  <option value="xh-ZA" title="xh-ZA">isiXhosa (South Africa)</option>
+  <option value="zu-ZA" title="zu-ZA">isiZulu (South Africa)</option>
+  <option value="it-IT" title="it-IT" data-keyboard="0410:00000410">Italian (Italy)</option>
+  <option value="it-SM" title="it-SM" data-keyboard="0410:00000410">Italian (San Marino)</option>
+  <option value="it-CH" title="it-CH" data-keyboard="0410:00000410">Italian (Switzerland)</option>
+  <option value="it-VA" title="it-VA" data-keyboard="0410:00000410">Italian (Vatican City)</option>
+  <option value="ja-JP" title="ja-JP" data-keyboard="0411:00000411">Japanese (Japan)</option>
+  <option value="jv-Latn-ID" title="jv-Latn-ID">Javanese (Latin, Indonesia)</option>
+  <option value="dyo-SN" title="dyo-SN">Jola-Fonyi (Senegal)</option>
+  <option value="kea-CV" title="kea-CV">Kabuverdianu (Cabo Verde)</option>
+  <option value="kab-DZ" title="kab-DZ">Kabyle (Algeria)</option>
+  <option value="kkj-CM" title="kkj-CM">Kako (Cameroon)</option>
+  <option value="kl-GL" title="kl-GL" data-keyboard="046f:0000046f">Kalaallisut (Greenland)</option>
+  <option value="kln-KE" title="kln-KE">Kalenjin (Kenya)</option>
+  <option value="kam-KE" title="kam-KE">Kamba (Kenya)</option>
+  <option value="kn-IN" title="kn-IN" data-keyboard="044b:0000044b">Kannada (India)</option>
+  <option value="ks-Arab-IN" title="ks-Arab-IN">Kashmiri (Arabic, India)</option>
+  <option value="kk-KZ" title="kk-KZ" data-keyboard="043f:0000043f">Kazakh (Kazakhstan)</option>
+  <option value="km-KH" title="km-KH" data-keyboard="0453:00000453">Khmer (Cambodia)</option>
+  <option value="ki-KE" title="ki-KE">Kikuyu (Kenya)</option>
+  <option value="rw-RW" title="rw-RW">Kinyarwanda (Rwanda)</option>
+  <option value="sw-CD" title="sw-CD">Kiswahili (Congo [DRC])</option>
+  <option value="sw-KE" title="sw-KE">Kiswahili (Kenya)</option>
+  <option value="sw-TZ" title="sw-TZ">Kiswahili (Tanzania)</option>
+  <option value="sw-UG" title="sw-UG">Kiswahili (Uganda)</option>
+  <option value="kok-IN" title="kok-IN">Konkani (India)</option>
+  <option value="ko-KR" title="ko-KR" data-keyboard="0412:00000412">Korean (Korea)</option>
+  <option value="ko-KP" title="ko-KP" data-keyboard="0412:00000412">Korean (North Korea)</option>
+  <option value="khq-ML" title="khq-ML">Koyra Chiini (Mali)</option>
+  <option value="ses-ML" title="ses-ML">Koyraboro Senni (Mali)</option>
+  <option value="ku-Arab-IR" title="ku-Arab-IR" data-keyboard="0492:00000492">Kurdish (Arabic, Iran)</option>
+  <option value="ku-Arab-IQ" title="ku-Arab-IQ" data-keyboard="0492:00000492">Kurdish (Arabic, Iraq)</option>
+  <option value="nmg-CM" title="nmg-CM">Kwasio (Cameroon)</option>
+  <option value="ky-KG" title="ky-KG" data-keyboard="0440:00000440">Kyrgyz (Kyrgyzstan)</option>
+  <option value="quc-GT" title="quc-GT">Kʼicheʼ (Guatemala)</option>
+  <option value="lkt-US" title="lkt-US">Lakota (United States)</option>
+  <option value="lag-TZ" title="lag-TZ">Langi (Tanzania)</option>
+  <option value="lo-LA" title="lo-LA" data-keyboard="0454:00000454">Lao (Laos)</option>
+  <option value="lv-LV" title="lv-LV" data-keyboard="0426:00000426">Latvian (Latvia)</option>
+  <option value="ln-AO" title="ln-AO">Lingala (Angola)</option>
+  <option value="ln-CF" title="ln-CF">Lingala (Central African Republic)</option>
+  <option value="ln-CD" title="ln-CD">Lingala (Congo [DRC])</option>
+  <option value="ln-CG" title="ln-CG">Lingala (Congo)</option>
+  <option value="lt-LT" title="lt-LT" data-keyboard="0427:00000427">Lithuanian (Lithuania)</option>
+  <option value="nds-DE" title="nds-DE">Low German (Germany)</option>
+  <option value="nds-NL" title="nds-NL">Low German (Netherlands)</option>
+  <option value="dsb-DE" title="dsb-DE">Lower Sorbian (Germany)</option>
+  <option value="lu-CD" title="lu-CD">Luba-Katanga (Congo [DRC])</option>
+  <option value="smj-NO" title="smj-NO">Lule Sami (Norway)</option>
+  <option value="smj-SE" title="smj-SE">Lule Sami (Sweden)</option>
+  <option value="luo-KE" title="luo-KE">Luo (Kenya)</option>
+  <option value="lb-LU" title="lb-LU" data-keyboard="046e:0000046e">Luxembourgish (Luxembourg)</option>
+  <option value="luy-KE" title="luy-KE">Luyia (Kenya)</option>
+  <option value="mk-MK" title="mk-MK" data-keyboard="042f:0000042f">Macedonian (North Macedonia)</option>
+  <option value="jmc-TZ" title="jmc-TZ">Machame (Tanzania)</option>
+  <option value="mgh-MZ" title="mgh-MZ">Makhuwa-Meetto (Mozambique)</option>
+  <option value="kde-TZ" title="kde-TZ">Makonde (Tanzania)</option>
+  <option value="mg-MG" title="mg-MG">Malagasy (Madagascar)</option>
+  <option value="ms-BN" title="ms-BN">Malay (Brunei)</option>
+  <option value="ms-MY" title="ms-MY">Malay (Malaysia)</option>
+  <option value="ms-SG" title="ms-SG">Malay (Singapore)</option>
+  <option value="ml-IN" title="ml-IN" data-keyboard="044c:0000044c">Malayalam (India)</option>
+  <option value="mt-MT" title="mt-MT" data-keyboard="043a:0000043a">Maltese (Malta)</option>
+  <option value="gv-IM" title="gv-IM">Manx (Isle of Man)</option>
+  <option value="mi-NZ" title="mi-NZ" data-keyboard="0481:00000481">Maori (New Zealand)</option>
+  <option value="arn-CL" title="arn-CL">Mapuche (Chile)</option>
+  <option value="mr-IN" title="mr-IN" data-keyboard="044e:0000044e">Marathi (India)</option>
+  <option value="mas-KE" title="mas-KE">Masai (Kenya)</option>
+  <option value="mas-TZ" title="mas-TZ">Masai (Tanzania)</option>
+  <option value="mzn-IR" title="mzn-IR">Mazanderani (Iran)</option>
+  <option value="mer-KE" title="mer-KE">Meru (Kenya)</option>
+  <option value="mgo-CM" title="mgo-CM">Metaʼ (Cameroon)</option>
+  <option value="moh-CA" title="moh-CA">Mohawk (Canada)</option>
+  <option value="mn-MN" title="mn-MN" data-keyboard="0450:00000450">Mongolian (Mongolia)</option>
+  <option value="mn-Mong-CN" title="mn-Mong-CN" data-keyboard="0850:00000850">Mongolian (Mongolian, China)</option>
+  <option value="mn-Mong-MN" title="mn-Mong-MN" data-keyboard="0850:00000850">Mongolian (Mongolian, Mongolia)</option>
+  <option value="mfe-MU" title="mfe-MU">Morisyen (Mauritius)</option>
+  <option value="mua-CM" title="mua-CM">Mundang (Cameroon)</option>
+  <option value="nqo-GN" title="nqo-GN">N’Ko (Guinea)</option>
+  <option value="naq-NA" title="naq-NA">Nama (Namibia)</option>
+  <option value="ne-IN" title="ne-IN" data-keyboard="0461:00000461">Nepali (India)</option>
+  <option value="ne-NP" title="ne-NP" data-keyboard="0461:00000461">Nepali (Nepal)</option>
+  <option value="nnh-CM" title="nnh-CM">Ngiemboon (Cameroon)</option>
+  <option value="jgo-CM" title="jgo-CM">Ngomba (Cameroon)</option>
+  <option value="nd-ZW" title="nd-ZW">North Ndebele (Zimbabwe)</option>
+  <option value="lrc-IR" title="lrc-IR">Northern Luri (Iran)</option>
+  <option value="lrc-IQ" title="lrc-IQ">Northern Luri (Iraq)</option>
+  <option value="se-FI" title="se-FI" data-keyboard="043b:0000043b">Northern Sami (Finland)</option>
+  <option value="se-NO" title="se-NO" data-keyboard="043b:0000043b">Northern Sami (Norway)</option>
+  <option value="se-SE" title="se-SE" data-keyboard="083b:0000083b">Northern Sami (Sweden)</option>
+  <option value="nb-NO" title="nb-NO" data-keyboard="0414:00000414">Norwegian Bokmål (Norway)</option>
+  <option value="nb-SJ" title="nb-SJ" data-keyboard="0414:00000414">Norwegian Bokmål (Svalbard &amp; Jan Mayen)</option>
+  <option value="nn-NO" title="nn-NO">Norwegian Nynorsk (Norway)</option>
+  <option value="nus-SS" title="nus-SS">Nuer (South Sudan)</option>
+  <option value="nyn-UG" title="nyn-UG">Nyankole (Uganda)</option>
+  <option value="oc-FR" title="oc-FR">Occitan (France)</option>
+  <option value="or-IN" title="or-IN" data-keyboard="0448:00000448">Odia (India)</option>
+  <option value="om-ET" title="om-ET">Oromo (Ethiopia)</option>
+  <option value="om-KE" title="om-KE">Oromo (Kenya)</option>
+  <option value="os-GE" title="os-GE">Ossetic (Georgia)</option>
+  <option value="os-RU" title="os-RU">Ossetic (Russia)</option>
+  <option value="ps-AF" title="ps-AF" data-keyboard="0463:00000463">Pashto (Afghanistan)</option>
+  <option value="ps-PK" title="ps-PK" data-keyboard="0463:00000463">Pashto (Pakistan)</option>
+  <option value="fa-IR" title="fa-IR" data-keyboard="0429:00000429">Persian (Iran)</option>
+  <option value="pl-PL" title="pl-PL" data-keyboard="0415:00000415">Polish (Poland)</option>
+  <option value="pt-AO" title="pt-AO" data-keyboard="0416:00000416">Portuguese (Angola)</option>
+  <option value="pt-BR" title="pt-BR" data-keyboard="0416:00000416">Portuguese (Brazil)</option>
+  <option value="pt-CV" title="pt-CV" data-keyboard="0416:00000416">Portuguese (Cabo Verde)</option>
+  <option value="pt-GQ" title="pt-GQ" data-keyboard="0416:00000416">Portuguese (Equatorial Guinea)</option>
+  <option value="pt-GW" title="pt-GW" data-keyboard="0416:00000416">Portuguese (Guinea-Bissau)</option>
+  <option value="pt-LU" title="pt-LU" data-keyboard="0416:00000416">Portuguese (Luxembourg)</option>
+  <option value="pt-MO" title="pt-MO" data-keyboard="0416:00000416">Portuguese (Macao SAR)</option>
+  <option value="pt-MZ" title="pt-MZ" data-keyboard="0416:00000416">Portuguese (Mozambique)</option>
+  <option value="pt-PT" title="pt-PT" data-keyboard="0816:00000816">Portuguese (Portugal)</option>
+  <option value="pt-ST" title="pt-ST" data-keyboard="0416:00000416">Portuguese (São Tomé &amp; Príncipe)</option>
+  <option value="pt-CH" title="pt-CH" data-keyboard="0416:00000416">Portuguese (Switzerland)</option>
+  <option value="pt-TL" title="pt-TL" data-keyboard="0416:00000416">Portuguese (Timor-Leste)</option>
+  <option value="prs-AF" title="prs-AF">prs (Afghanistan)</option>
+  <option value="prg-001" title="prg-001">Prussian (World)</option>
+  <option value="pa-Arab-PK" title="pa-Arab-PK">Punjabi (Arabic, Pakistan)</option>
+  <option value="pa-IN" title="pa-IN" data-keyboard="0446:00000446">Punjabi (India)</option>
+  <option value="quz-BO" title="quz-BO">Quechua (Bolivia)</option>
+  <option value="quz-EC" title="quz-EC">Quechua (Ecuador)</option>
+  <option value="quz-PE" title="quz-PE">Quechua (Peru)</option>
+  <option value="ro-MD" title="ro-MD" data-keyboard="0418:00000418">Romanian (Moldova)</option>
+  <option value="ro-RO" title="ro-RO" data-keyboard="0418:00000418">Romanian (Romania)</option>
+  <option value="rm-CH" title="rm-CH">Romansh (Switzerland)</option>
+  <option value="rof-TZ" title="rof-TZ">Rombo (Tanzania)</option>
+  <option value="rn-BI" title="rn-BI">Rundi (Burundi)</option>
+  <option value="ru-BY" title="ru-BY" data-keyboard="0419:00000419">Russian (Belarus)</option>
+  <option value="ru-KZ" title="ru-KZ" data-keyboard="0419:00000419">Russian (Kazakhstan)</option>
+  <option value="ru-KG" title="ru-KG" data-keyboard="0419:00000419">Russian (Kyrgyzstan)</option>
+  <option value="ru-MD" title="ru-MD" data-keyboard="0419:00000419">Russian (Moldova)</option>
+  <option value="ru-RU" title="ru-RU" data-keyboard="0419:00000419">Russian (Russia)</option>
+  <option value="ru-UA" title="ru-UA" data-keyboard="0419:00000419">Russian (Ukraine)</option>
+  <option value="rwk-TZ" title="rwk-TZ">Rwa (Tanzania)</option>
+  <option value="ssy-ER" title="ssy-ER">Saho (Eritrea)</option>
+  <option value="sah-RU" title="sah-RU" data-keyboard="0485:00000485">Sakha (Russia)</option>
+  <option value="saq-KE" title="saq-KE">Samburu (Kenya)</option>
+  <option value="sg-CF" title="sg-CF">Sango (Central African Republic)</option>
+  <option value="sbp-TZ" title="sbp-TZ">Sangu (Tanzania)</option>
+  <option value="sa-IN" title="sa-IN">Sanskrit (India)</option>
+  <option value="gd-GB" title="gd-GB">Scottish Gaelic (United Kingdom)</option>
+  <option value="seh-MZ" title="seh-MZ">Sena (Mozambique)</option>
+  <option value="sr-Cyrl-BA" title="sr-Cyrl-BA" data-keyboard="281a:00000c1a">Serbian (Cyrillic, Bosnia &amp; Herzegovina)</option>
+  <option value="sr-Cyrl-XK" title="sr-Cyrl-XK" data-keyboard="281a:00000c1a">Serbian (Cyrillic, Kosovo)</option>
+  <option value="sr-Cyrl-ME" title="sr-Cyrl-ME" data-keyboard="281a:00000c1a">Serbian (Cyrillic, Montenegro)</option>
+  <option value="sr-Cyrl-RS" title="sr-Cyrl-RS" data-keyboard="281a:00000c1a">Serbian (Cyrillic, Serbia)</option>
+  <option value="sr-Latn-BA" title="sr-Latn-BA" data-keyboard="241a:0000081a">Serbian (Latin, Bosnia &amp; Herzegovina)</option>
+  <option value="sr-Latn-XK" title="sr-Latn-XK" data-keyboard="241a:0000081a">Serbian (Latin, Kosovo)</option>
+  <option value="sr-Latn-ME" title="sr-Latn-ME" data-keyboard="241a:0000081a">Serbian (Latin, Montenegro)</option>
+  <option value="sr-Latn-RS" title="sr-Latn-RS" data-keyboard="241a:0000081a">Serbian (Latin, Serbia)</option>
+  <option value="st-LS" title="st-LS">Sesotho (Lesotho)</option>
+  <option value="st-ZA" title="st-ZA">Sesotho (South Africa)</option>
+  <option value="nso-ZA" title="nso-ZA" data-keyboard="046c:0000046c">Sesotho sa Leboa (South Africa)</option>
+  <option value="tn-BW" title="tn-BW" data-keyboard="0432:00000432">Setswana (Botswana)</option>
+  <option value="tn-ZA" title="tn-ZA" data-keyboard="0432:00000432">Setswana (South Africa)</option>
+  <option value="ksb-TZ" title="ksb-TZ">Shambala (Tanzania)</option>
+  <option value="sn-Latn-ZW" title="sn-Latn-ZW">Shona (Latin, Zimbabwe)</option>
+  <option value="sd-Arab-PK" title="sd-Arab-PK">Sindhi (Arabic, Pakistan)</option>
+  <option value="si-LK" title="si-LK" data-keyboard="045b:0000045b">Sinhala (Sri Lanka)</option>
+  <option value="ss-SZ" title="ss-SZ">siSwati (Eswatini)</option>
+  <option value="ss-ZA" title="ss-ZA">siSwati (South Africa)</option>
+  <option value="sms-FI" title="sms-FI">Skolt Sami (Finland)</option>
+  <option value="sk-SK" title="sk-SK" data-keyboard="041b:0000041b">Slovak (Slovakia)</option>
+  <option value="sl-SI" title="sl-SI" data-keyboard="0424:00000424">Slovenian (Slovenia)</option>
+  <option value="xog-UG" title="xog-UG">Soga (Uganda)</option>
+  <option value="so-DJ" title="so-DJ">Somali (Djibouti)</option>
+  <option value="so-ET" title="so-ET">Somali (Ethiopia)</option>
+  <option value="so-KE" title="so-KE">Somali (Kenya)</option>
+  <option value="so-SO" title="so-SO">Somali (Somalia)</option>
+  <option value="nr-ZA" title="nr-ZA">South Ndebele (South Africa)</option>
+  <option value="sma-NO" title="sma-NO">Southern Sami (Norway)</option>
+  <option value="sma-SE" title="sma-SE">Southern Sami (Sweden)</option>
+  <option value="es-AR" title="es-AR" data-keyboard="080a:0000080a">Spanish (Argentina)</option>
+  <option value="es-BZ" title="es-BZ" data-keyboard="080a:0000080a">Spanish (Belize)</option>
+  <option value="es-BO" title="es-BO" data-keyboard="080a:0000080a">Spanish (Bolivia)</option>
+  <option value="es-BR" title="es-BR" data-keyboard="080a:0000080a">Spanish (Brazil)</option>
+  <option value="es-CL" title="es-CL" data-keyboard="080a:0000080a">Spanish (Chile)</option>
+  <option value="es-CO" title="es-CO" data-keyboard="080a:0000080a">Spanish (Colombia)</option>
+  <option value="es-CR" title="es-CR" data-keyboard="080a:0000080a">Spanish (Costa Rica)</option>
+  <option value="es-CU" title="es-CU" data-keyboard="080a:0000080a">Spanish (Cuba)</option>
+  <option value="es-DO" title="es-DO" data-keyboard="080a:0000080a">Spanish (Dominican Republic)</option>
+  <option value="es-EC" title="es-EC" data-keyboard="080a:0000080a">Spanish (Ecuador)</option>
+  <option value="es-SV" title="es-SV" data-keyboard="080a:0000080a">Spanish (El Salvador)</option>
+  <option value="es-GQ" title="es-GQ" data-keyboard="080a:0000080a">Spanish (Equatorial Guinea)</option>
+  <option value="es-GT" title="es-GT" data-keyboard="080a:0000080a">Spanish (Guatemala)</option>
+  <option value="es-HN" title="es-HN" data-keyboard="080a:0000080a">Spanish (Honduras)</option>
+  <option value="es-419" title="es-419" data-keyboard="080a:0000080a">Spanish (Latin America)</option>
+  <option value="es-MX" title="es-MX" data-keyboard="080a:0000080a">Spanish (Mexico)</option>
+  <option value="es-NI" title="es-NI" data-keyboard="080a:0000080a">Spanish (Nicaragua)</option>
+  <option value="es-PA" title="es-PA" data-keyboard="080a:0000080a">Spanish (Panama)</option>
+  <option value="es-PY" title="es-PY" data-keyboard="080a:0000080a">Spanish (Paraguay)</option>
+  <option value="es-PE" title="es-PE" data-keyboard="080a:0000080a">Spanish (Peru)</option>
+  <option value="es-PH" title="es-PH" data-keyboard="080a:0000080a">Spanish (Philippines)</option>
+  <option value="es-PR" title="es-PR" data-keyboard="080a:0000080a">Spanish (Puerto Rico)</option>
+  <option value="es-ES" title="es-ES" data-keyboard="0c0a:0000040a">Spanish (Spain)</option>
+  <option value="es-US" title="es-US" data-keyboard="080a:0000080a">Spanish (United States)</option>
+  <option value="es-UY" title="es-UY" data-keyboard="080a:0000080a">Spanish (Uruguay)</option>
+  <option value="es-VE" title="es-VE" data-keyboard="080a:0000080a">Spanish (Venezuela)</option>
+  <option value="zgh-Tfng-MA" title="zgh-Tfng-MA">Standard Moroccan Tamazight (Tifinagh, Morocco)</option>
+  <option value="sv-AX" title="sv-AX" data-keyboard="041d:0000041d">Swedish (Åland Islands)</option>
+  <option value="sv-FI" title="sv-FI" data-keyboard="041d:0000041d">Swedish (Finland)</option>
+  <option value="sv-SE" title="sv-SE" data-keyboard="041d:0000041d">Swedish (Sweden)</option>
+  <option value="gsw-FR" title="gsw-FR">Swiss German (France)</option>
+  <option value="gsw-LI" title="gsw-LI">Swiss German (Liechtenstein)</option>
+  <option value="gsw-CH" title="gsw-CH">Swiss German (Switzerland)</option>
+  <option value="syr-SY" title="syr-SY" data-keyboard="045a:0000045a">Syriac (Syria)</option>
+  <option value="shi-Latn-MA" title="shi-Latn-MA">Tachelhit (Latin, Morocco)</option>
+  <option value="shi-Tfng-MA" title="shi-Tfng-MA">Tachelhit (Tifinagh, Morocco)</option>
+  <option value="dav-KE" title="dav-KE">Taita (Kenya)</option>
+  <option value="tg-Cyrl-TJ" title="tg-Cyrl-TJ" data-keyboard="0428:00000428">Tajik (Cyrillic, Tajikistan)</option>
+  <option value="ta-IN" title="ta-IN" data-keyboard="0449:00000449">Tamil (India)</option>
+  <option value="ta-MY" title="ta-MY" data-keyboard="0449:00000449">Tamil (Malaysia)</option>
+  <option value="ta-SG" title="ta-SG" data-keyboard="0449:00000449">Tamil (Singapore)</option>
+  <option value="ta-LK" title="ta-LK" data-keyboard="0449:00000449">Tamil (Sri Lanka)</option>
+  <option value="twq-NE" title="twq-NE">Tasawaq (Niger)</option>
+  <option value="tt-RU" title="tt-RU" data-keyboard="0444:00000444">Tatar (Russia)</option>
+  <option value="te-IN" title="te-IN" data-keyboard="044a:0000044a">Telugu (India)</option>
+  <option value="teo-KE" title="teo-KE">Teso (Kenya)</option>
+  <option value="teo-UG" title="teo-UG">Teso (Uganda)</option>
+  <option value="th-TH" title="th-TH" data-keyboard="041e:0000041e">Thai (Thailand)</option>
+  <option value="bo-CN" title="bo-CN" data-keyboard="0451:00000451">Tibetan (China)</option>
+  <option value="bo-IN" title="bo-IN" data-keyboard="0451:00000451">Tibetan (India)</option>
+  <option value="tig-ER" title="tig-ER">Tigre (Eritrea)</option>
+  <option value="ti-ER" title="ti-ER">Tigrinya (Eritrea)</option>
+  <option value="ti-ET" title="ti-ET">Tigrinya (Ethiopia)</option>
+  <option value="to-TO" title="to-TO">Tongan (Tonga)</option>
+  <option value="tr-CY" title="tr-CY" data-keyboard="041f:0000041f">Turkish (Cyprus)</option>
+  <option value="tr-TR" title="tr-TR" data-keyboard="041f:0000041f">Turkish (Turkey)</option>
+  <option value="tk-TM" title="tk-TM" data-keyboard="0442:00000442">Turkmen (Turkmenistan)</option>
+  <option value="uk-UA" title="uk-UA" data-keyboard="0422:00000422">Ukrainian (Ukraine)</option>
+  <option value="hsb-DE" title="hsb-DE" data-keyboard="042e:0000042e">Upper Sorbian (Germany)</option>
+  <option value="ur-IN" title="ur-IN" data-keyboard="0420:00000420">Urdu (India)</option>
+  <option value="ur-PK" title="ur-PK" data-keyboard="0420:00000420">Urdu (Pakistan)</option>
+  <option value="ug-CN" title="ug-CN" data-keyboard="0480:00000480">Uyghur (China)</option>
+  <option value="uz-Arab-AF" title="uz-Arab-AF">Uzbek (Arabic, Afghanistan)</option>
+  <option value="uz-Cyrl-UZ" title="uz-Cyrl-UZ" data-keyboard="0843:00000843">Uzbek (Cyrillic, Uzbekistan)</option>
+  <option value="uz-Latn-UZ" title="uz-Latn-UZ">Uzbek (Latin, Uzbekistan)</option>
+  <option value="vai-Latn-LR" title="vai-Latn-LR">Vai (Latin, Liberia)</option>
+  <option value="vai-Vaii-LR" title="vai-Vaii-LR">Vai (Vai, Liberia)</option>
+  <option value="ve-ZA" title="ve-ZA">Venda (South Africa)</option>
+  <option value="vi-VN" title="vi-VN" data-keyboard="042a:0000042a">Vietnamese (Vietnam)</option>
+  <option value="vo-001" title="vo-001">Volapük (World)</option>
+  <option value="vun-TZ" title="vun-TZ">Vunjo (Tanzania)</option>
+  <option value="wae-CH" title="wae-CH">Walser (Switzerland)</option>
+  <option value="cy-GB" title="cy-GB" data-keyboard="0452:00000452">Welsh (United Kingdom)</option>
+  <option value="fy-NL" title="fy-NL">Western Frisian (Netherlands)</option>
+  <option value="wal-ET" title="wal-ET">Wolaytta (Ethiopia)</option>
+  <option value="wo-SN" title="wo-SN" data-keyboard="0488:00000488">Wolof (Senegal)</option>
+  <option value="ts-ZA" title="ts-ZA">Xitsonga (South Africa)</option>
+  <option value="yav-CM" title="yav-CM">Yangben (Cameroon)</option>
+  <option value="ii-CN" title="ii-CN">Yi (China)</option>
+  <option value="yi-001" title="yi-001">Yiddish (World)</option>
+  <option value="yo-BJ" title="yo-BJ" data-keyboard="046a:0000046a">Yoruba (Benin)</option>
+  <option value="yo-NG" title="yo-NG" data-keyboard="046a:0000046a">Yoruba (Nigeria)</option>
+  <option value="dje-NE" title="dje-NE">Zarma (Niger)</option>
+</select>
+                </dd>
+                <dt>Use this <strong>keyboard layout</strong>:</dt>
+                <dd>
+                  <select name="KeyboardLayout">
+  <option value="041c:0000041c" title="041c:0000041c">Albanian</option>
+  <option value="0401:00000401" title="0401:00000401">Arabic (101)</option>
+  <option value="0401:00010401" title="0401:00010401">Arabic (102)</option>
+  <option value="0401:00020401" title="0401:00020401">Arabic (102) AZERTY</option>
+  <option value="042b:0000042b" title="042b:0000042b">Armenian Eastern</option>
+  <option value="042b:0002042b" title="042b:0002042b">Armenian Phonetic</option>
+  <option value="042b:0003042b" title="042b:0003042b">Armenian Typewriter</option>
+  <option value="042b:0001042b" title="042b:0001042b">Armenian Western</option>
+  <option value="044d:0000044d" title="044d:0000044d">Assamese InScript</option>
+  <option value="042c:0001042c" title="042c:0001042c">Azerbaijani (Standard)</option>
+  <option value="082c:0000082c" title="082c:0000082c">Azerbaijani/Azeri Cyrillic</option>
+  <option value="042c:0000042c" title="042c:0000042c">Azerbaijani/Azeri Latin</option>
+  <option value="046d:0000046d" title="046d:0000046d">Bashkir</option>
+  <option value="0423:00000423" title="0423:00000423">Belarusian</option>
+  <option value="0813:0001080c" title="0813:0001080c">Belgian (Comma)</option>
+  <option value="0813:00000813" title="0813:00000813">Belgian (Period)</option>
+  <option value="080c:0000080c" title="080c:0000080c">Belgian French</option>
+  <option value="0445:00000445" title="0445:00000445">Bengali/Bangla (Bangladesh)</option>
+  <option value="0445:00020445" title="0445:00020445">Bengali/Bangla InScript</option>
+  <option value="0445:00010445" title="0445:00010445">Bengali/Bangla InScript (Legacy)</option>
+  <option value="201a:0000201a" title="201a:0000201a">Bosnian (Cyrillic)</option>
+  <option value="0402:00030402" title="0402:00030402">Bulgarian</option>
+  <option value="0402:00010402" title="0402:00010402">Bulgarian (Latin)</option>
+  <option value="0402:00040402" title="0402:00040402">Bulgarian (Phonetic Traditional)</option>
+  <option value="0402:00020402" title="0402:00020402">Bulgarian (Phonetic)</option>
+  <option value="0402:00000402" title="0402:00000402">Bulgarian (Typewriter)</option>
+  <option value="1009:00001009" title="1009:00001009">Canadian French</option>
+  <option value="0c0c:00000c0c" title="0c0c:00000c0c">Canadian French (Legacy)</option>
+  <option value="1009:00011009" title="1009:00011009">Canadian Multilingual Standard</option>
+  <option value="0492:00000492" title="0492:00000492">Central Kurdish</option>
+  <option value="045c:0000045c" title="045c:0000045c">Cherokee Nation</option>
+  <option value="045c:0001045c" title="045c:0001045c">Cherokee Nation Phonetic</option>
+  <option value="1004:00001004" title="1004:00001004">Chinese (Simplified, Singapore) - US Keyboard</option>
+  <option value="0804:00000804" title="0804:00000804">Chinese (Simplified) - US Keyboard</option>
+  <option value="0c04:00000c04" title="0c04:00000c04">Chinese (Traditional, Hong Kong S.A.R.) - US Keyboard</option>
+  <option value="1404:00001404" title="1404:00001404">Chinese (Traditional, Macao S.A.R.) - US Keyboard</option>
+  <option value="0404:00000404" title="0404:00000404">Chinese (Traditional) - US Keyboard</option>
+  <option value="041a:0000041a" title="041a:0000041a">Croatian</option>
+  <option value="0405:00000405" title="0405:00000405">Czech</option>
+  <option value="0405:00010405" title="0405:00010405">Czech (QWERTY)</option>
+  <option value="0405:00020405" title="0405:00020405">Czech Programmers</option>
+  <option value="0406:00000406" title="0406:00000406">Danish</option>
+  <option value="0439:00000439" title="0439:00000439">Devanagari InScript</option>
+  <option value="0465:00000465" title="0465:00000465">Divehi Phonetic</option>
+  <option value="0465:00010465" title="0465:00010465">Divehi Typewriter</option>
+  <option value="0413:00000413" title="0413:00000413">Dutch</option>
+  <option value="0409:00010409" title="0409:00010409">Dvorak - United States</option>
+  <option value="0409:00030409" title="0409:00030409">Dvorak for left hand - United States</option>
+  <option value="0409:00040409" title="0409:00040409">Dvorak for right hand - United States</option>
+  <option value="0c51:00000c51" title="0c51:00000c51">Dzongkha</option>
+  <option value="0425:00000425" title="0425:00000425">Estonian</option>
+  <option value="0438:00000438" title="0438:00000438">Faroese</option>
+  <option value="040b:0000040b" title="040b:0000040b">Finnish</option>
+  <option value="083b:0001083b" title="083b:0001083b">Finnish with Sami</option>
+  <option value="040c:0000040c" title="040c:0000040c">French</option>
+  <option value="0437:00000437" title="0437:00000437">Georgian</option>
+  <option value="0437:00020437" title="0437:00020437">Georgian (Ergonomic)</option>
+  <option value="0437:00040437" title="0437:00040437">Georgian (Old Alphabets)</option>
+  <option value="0437:00010437" title="0437:00010437">Georgian (QWERTY)</option>
+  <option value="0437:00030437" title="0437:00030437">Georgian Ministry of Education and Science Schools</option>
+  <option value="0407:00000407" title="0407:00000407">German</option>
+  <option value="0407:00010407" title="0407:00010407">German (IBM)</option>
+  <option value="0408:00000408" title="0408:00000408">Greek</option>
+  <option value="0408:00010408" title="0408:00010408">Greek (220)</option>
+  <option value="0408:00030408" title="0408:00030408">Greek (220) Latin</option>
+  <option value="0408:00020408" title="0408:00020408">Greek (319)</option>
+  <option value="0408:00040408" title="0408:00040408">Greek (319) Latin</option>
+  <option value="0408:00050408" title="0408:00050408">Greek Latin</option>
+  <option value="0408:00060408" title="0408:00060408">Greek Polytonic</option>
+  <option value="046f:0000046f" title="046f:0000046f">Greenlandic</option>
+  <option value="0474:00000474" title="0474:00000474">Guarani</option>
+  <option value="0447:00000447" title="0447:00000447">Gujarati</option>
+  <option value="0468:00000468" title="0468:00000468">Hausa</option>
+  <option value="0475:00000475" title="0475:00000475">Hawaiian</option>
+  <option value="040d:0000040d" title="040d:0000040d">Hebrew</option>
+  <option value="040d:0002040d" title="040d:0002040d">Hebrew (Standard)</option>
+  <option value="0439:00010439" title="0439:00010439">Hindi Traditional</option>
+  <option value="040e:0000040e" title="040e:0000040e">Hungarian</option>
+  <option value="040e:0001040e" title="040e:0001040e">Hungarian 101-key</option>
+  <option value="040f:0000040f" title="040f:0000040f">Icelandic</option>
+  <option value="0470:00000470" title="0470:00000470">Igbo</option>
+  <option value="4009:00004009" title="4009:00004009">India</option>
+  <option value="085d:0000085d" title="085d:0000085d">Inuktitut - Latin</option>
+  <option value="1809:00001809" title="1809:00001809">Irish</option>
+  <option value="0410:00000410" title="0410:00000410">Italian</option>
+  <option value="0410:00010410" title="0410:00010410">Italian (142)</option>
+  <option value="0411:00000411" title="0411:00000411">Japanese</option>
+  <option value="044b:0000044b" title="044b:0000044b">Kannada</option>
+  <option value="043f:0000043f" title="043f:0000043f">Kazakh</option>
+  <option value="0453:00000453" title="0453:00000453">Khmer</option>
+  <option value="0453:00010453" title="0453:00010453">Khmer (NIDA)</option>
+  <option value="0412:00000412" title="0412:00000412">Korean</option>
+  <option value="0440:00000440" title="0440:00000440">Kyrgyz Cyrillic</option>
+  <option value="0454:00000454" title="0454:00000454">Lao</option>
+  <option value="080a:0000080a" title="080a:0000080a">Latin American</option>
+  <option value="0426:00000426" title="0426:00000426">Latvian</option>
+  <option value="0426:00010426" title="0426:00010426">Latvian (QWERTY, Legacy)</option>
+  <option value="0426:00020426" title="0426:00020426">Latvian (Standard)</option>
+  <option value="0427:00010427" title="0427:00010427">Lithuanian</option>
+  <option value="0427:00000427" title="0427:00000427">Lithuanian IBM</option>
+  <option value="0427:00020427" title="0427:00020427">Lithuanian Standard</option>
+  <option value="046e:0000046e" title="046e:0000046e">Luxembourgish</option>
+  <option value="042f:0000042f" title="042f:0000042f">Macedonian (FYROM)</option>
+  <option value="042f:0001042f" title="042f:0001042f">Macedonian (FYROM) - Standard</option>
+  <option value="044c:0000044c" title="044c:0000044c">Malayalam</option>
+  <option value="043a:0000043a" title="043a:0000043a">Maltese 47-Key</option>
+  <option value="043a:0001043a" title="043a:0001043a">Maltese 48-Key</option>
+  <option value="0481:00000481" title="0481:00000481">Maori</option>
+  <option value="044e:0000044e" title="044e:0000044e">Marathi</option>
+  <option value="0850:00020850" title="0850:00020850">Mongolian (Mongolian Script - Standard)</option>
+  <option value="0850:00000850" title="0850:00000850">Mongolian (Mongolian Script)</option>
+  <option value="0450:00000450" title="0450:00000450">Mongolian Cyrillic</option>
+  <option value="0461:00000461" title="0461:00000461">Nepali</option>
+  <option value="0414:00000414" title="0414:00000414">Norwegian</option>
+  <option value="043b:0000043b" title="043b:0000043b">Norwegian with Sami</option>
+  <option value="0448:00000448" title="0448:00000448">Odia, Oriya</option>
+  <option value="0463:00000463" title="0463:00000463">Pashto (Afghanistan)</option>
+  <option value="0429:00000429" title="0429:00000429">Persian</option>
+  <option value="0429:00050429" title="0429:00050429">Persian (Standard)</option>
+  <option value="0415:00010415" title="0415:00010415">Polish (214)</option>
+  <option value="0415:00000415" title="0415:00000415">Polish (Programmers)</option>
+  <option value="0816:00000816" title="0816:00000816">Portuguese</option>
+  <option value="0416:00000416" title="0416:00000416">Portuguese (Brazilian ABNT)</option>
+  <option value="0416:00010416" title="0416:00010416">Portuguese (Brazilian ABNT2)</option>
+  <option value="0446:00000446" title="0446:00000446">Punjabi</option>
+  <option value="0418:00000418" title="0418:00000418">Romanian (Legacy)</option>
+  <option value="0418:00020418" title="0418:00020418">Romanian (Programmers)</option>
+  <option value="0418:00010418" title="0418:00010418">Romanian (Standard)</option>
+  <option value="0419:00000419" title="0419:00000419">Russian</option>
+  <option value="0419:00020419" title="0419:00020419">Russian - Mnemonic</option>
+  <option value="0419:00010419" title="0419:00010419">Russian (Typewriter)</option>
+  <option value="0485:00000485" title="0485:00000485">Sakha, Yakut</option>
+  <option value="083b:0002083b" title="083b:0002083b">Sami Extended Finland-Sweden</option>
+  <option value="043b:0001043b" title="043b:0001043b">Sami Extended Norway</option>
+  <option value="1809:00011809" title="1809:00011809">Scottish Gaelic</option>
+  <option value="281a:00000c1a" title="281a:00000c1a">Serbian (Cyrillic)</option>
+  <option value="241a:0000081a" title="241a:0000081a">Serbian (Latin)</option>
+  <option value="046c:0000046c" title="046c:0000046c">Sesotho sa Leboa</option>
+  <option value="0432:00000432" title="0432:00000432">Setswana</option>
+  <option value="045b:0000045b" title="045b:0000045b">Sinhala</option>
+  <option value="045b:0001045b" title="045b:0001045b">Sinhala - Wij 9</option>
+  <option value="041b:0000041b" title="041b:0000041b">Slovak</option>
+  <option value="041b:0001041b" title="041b:0001041b">Slovak (QWERTY)</option>
+  <option value="0424:00000424" title="0424:00000424">Slovenian</option>
+  <option value="042e:0001042e" title="042e:0001042e">Sorbian Extended</option>
+  <option value="042e:0002042e" title="042e:0002042e">Sorbian Standard</option>
+  <option value="042e:0000042e" title="042e:0000042e">Sorbian Standard (Legacy)</option>
+  <option value="0c0a:0000040a" title="0c0a:0000040a">Spanish</option>
+  <option value="0c0a:0001040a" title="0c0a:0001040a">Spanish Variation</option>
+  <option value="041d:0000041d" title="041d:0000041d">Swedish</option>
+  <option value="083b:0000083b" title="083b:0000083b">Swedish with Sami</option>
+  <option value="100c:0000100c" title="100c:0000100c">Swiss French</option>
+  <option value="0807:00000807" title="0807:00000807">Swiss German</option>
+  <option value="045a:0000045a" title="045a:0000045a">Syriac</option>
+  <option value="045a:0001045a" title="045a:0001045a">Syriac Phonetic</option>
+  <option value="0428:00000428" title="0428:00000428">Tajik</option>
+  <option value="0449:00000449" title="0449:00000449">Tamil</option>
+  <option value="0449:00020449" title="0449:00020449">Tamil 99</option>
+  <option value="0444:00010444" title="0444:00010444">Tatar</option>
+  <option value="0444:00000444" title="0444:00000444">Tatar (Legacy)</option>
+  <option value="044a:0000044a" title="044a:0000044a">Telugu</option>
+  <option value="041e:0000041e" title="041e:0000041e">Thai Kedmanee</option>
+  <option value="041e:0002041e" title="041e:0002041e">Thai Kedmanee (non-ShiftLock)</option>
+  <option value="041e:0001041e" title="041e:0001041e">Thai Pattachote</option>
+  <option value="041e:0003041e" title="041e:0003041e">Thai Pattachote (non-ShiftLock)</option>
+  <option value="0451:00000451" title="0451:00000451">Tibetan (PRC - Legacy)</option>
+  <option value="0451:00010451" title="0451:00010451">Tibetan (PRC - Standard/Updated)</option>
+  <option value="0850:00010850" title="0850:00010850">Traditional Mongolian (Standard)</option>
+  <option value="041f:0001041f" title="041f:0001041f">Turkish F</option>
+  <option value="041f:0000041f" title="041f:0000041f">Turkish Q</option>
+  <option value="0442:00000442" title="0442:00000442">Turkmen</option>
+  <option value="0422:00000422" title="0422:00000422">Ukrainian</option>
+  <option value="0422:00020422" title="0422:00020422">Ukrainian (Enhanced)</option>
+  <option value="0809:00000809" title="0809:00000809">United Kingdom</option>
+  <option value="0452:00000452" title="0452:00000452">United Kingdom Extended</option>
+  <option value="0409:00000409" title="0409:00000409" selected="selected">United States - English</option>
+  <option value="0409:00020409" title="0409:00020409">United States - International</option>
+  <option value="0420:00000420" title="0420:00000420">Urdu</option>
+  <option value="0409:00050409" title="0409:00050409">US English Table for IBM Arabic 238_L</option>
+  <option value="0480:00010480" title="0480:00010480">Uyghur</option>
+  <option value="0480:00000480" title="0480:00000480">Uyghur (Legacy)</option>
+  <option value="0843:00000843" title="0843:00000843">Uzbek Cyrillic</option>
+  <option value="042a:0000042a" title="042a:0000042a">Vietnamese</option>
+  <option value="0488:00000488" title="0488:00000488">Wolof</option>
+  <option value="046a:0000046a" title="046a:0000046a">Yoruba</option>
+</select>
+                </dd>
+              </dl>
+            </fieldset>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="LanguageMode" value="Interactive" />
+          <span class="flex-column">
+            <span>Select language settings interactively during Windows Setup</span>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Processor architectures:</th>
+      <td>
+        <select name="ProcessorArchitecture" required="required" multiple="multiple">
+  <option value="x86" title="x86">Intel/AMD 32-bit</option>
+  <option value="amd64" title="amd64" selected="selected">Intel/AMD 64-bit</option>
+  <option value="arm64" title="arm64">Windows on Arm64</option>
+</select>
+        <p class="Description">When you select multiple processor architectures, a single <code>autounattend.xml</code> file will be created that is applicable to all of these architectures.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Setup settings:</th>
+      <td>
+        <label class="flex-row">
+          <input type="checkbox" name="BypassRequirementsCheck" value="true" />
+          <span class="flex-column">
+            <span>Bypass Windows 11 requirements check</span>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Computer name:</th>
+      <td>
+        <input type="text" name="ComputerName" value="" maxlength="15" />
+        <p class="Description">Leave empty to let Windows generate a random computer name like <code>DESKTOP-ZFAH8Z2</code>.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Time zone:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="TimeZoneMode" value="Implicit" checked="checked" />
+          <span class="flex-column">
+            <span>Let Windows try to determine your time zone based on language and region settings</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="TimeZoneMode" value="Explicit" />
+          <span class="flex-column">
+            <fieldset>
+              <span>Use this time zone: <select name="TimeZone">
+  <option value="Dateline Standard Time">(UTC-12:00) International Date Line West</option>
+  <option value="UTC-11">(UTC-11:00) Coordinated Universal Time-11</option>
+  <option value="Aleutian Standard Time">(UTC-10:00) Aleutian Islands</option>
+  <option value="Hawaiian Standard Time">(UTC-10:00) Hawaii</option>
+  <option value="Marquesas Standard Time">(UTC-09:30) Marquesas Islands</option>
+  <option value="Alaskan Standard Time">(UTC-09:00) Alaska</option>
+  <option value="UTC-09">(UTC-09:00) Coordinated Universal Time-09</option>
+  <option value="Pacific Standard Time (Mexico)">(UTC-08:00) Baja California</option>
+  <option value="UTC-08">(UTC-08:00) Coordinated Universal Time-08</option>
+  <option value="Pacific Standard Time">(UTC-08:00) Pacific Time (US &amp; Canada)</option>
+  <option value="US Mountain Standard Time">(UTC-07:00) Arizona</option>
+  <option value="Mountain Standard Time (Mexico)">(UTC-07:00) La Paz, Mazatlan</option>
+  <option value="Mountain Standard Time">(UTC-07:00) Mountain Time (US &amp; Canada)</option>
+  <option value="Yukon Standard Time">(UTC-07:00) Yukon</option>
+  <option value="Central America Standard Time">(UTC-06:00) Central America</option>
+  <option value="Central Standard Time">(UTC-06:00) Central Time (US &amp; Canada)</option>
+  <option value="Easter Island Standard Time">(UTC-06:00) Easter Island</option>
+  <option value="Central Standard Time (Mexico)">(UTC-06:00) Guadalajara, Mexico City, Monterrey</option>
+  <option value="Canada Central Standard Time">(UTC-06:00) Saskatchewan</option>
+  <option value="SA Pacific Standard Time">(UTC-05:00) Bogota, Lima, Quito, Rio Branco</option>
+  <option value="Eastern Standard Time (Mexico)">(UTC-05:00) Chetumal</option>
+  <option value="Eastern Standard Time">(UTC-05:00) Eastern Time (US &amp; Canada)</option>
+  <option value="Haiti Standard Time">(UTC-05:00) Haiti</option>
+  <option value="Cuba Standard Time">(UTC-05:00) Havana</option>
+  <option value="US Eastern Standard Time">(UTC-05:00) Indiana (East)</option>
+  <option value="Turks And Caicos Standard Time">(UTC-05:00) Turks and Caicos</option>
+  <option value="Paraguay Standard Time">(UTC-04:00) Asuncion</option>
+  <option value="Atlantic Standard Time">(UTC-04:00) Atlantic Time (Canada)</option>
+  <option value="Venezuela Standard Time">(UTC-04:00) Caracas</option>
+  <option value="Central Brazilian Standard Time">(UTC-04:00) Cuiaba</option>
+  <option value="SA Western Standard Time">(UTC-04:00) Georgetown, La Paz, Manaus, San Juan</option>
+  <option value="Pacific SA Standard Time">(UTC-04:00) Santiago</option>
+  <option value="Newfoundland Standard Time">(UTC-03:30) Newfoundland</option>
+  <option value="Tocantins Standard Time">(UTC-03:00) Araguaina</option>
+  <option value="E. South America Standard Time">(UTC-03:00) Brasilia</option>
+  <option value="SA Eastern Standard Time">(UTC-03:00) Cayenne, Fortaleza</option>
+  <option value="Argentina Standard Time">(UTC-03:00) City of Buenos Aires</option>
+  <option value="Greenland Standard Time">(UTC-03:00) Greenland</option>
+  <option value="Montevideo Standard Time">(UTC-03:00) Montevideo</option>
+  <option value="Magallanes Standard Time">(UTC-03:00) Punta Arenas</option>
+  <option value="Saint Pierre Standard Time">(UTC-03:00) Saint Pierre and Miquelon</option>
+  <option value="Bahia Standard Time">(UTC-03:00) Salvador</option>
+  <option value="UTC-02">(UTC-02:00) Coordinated Universal Time-02</option>
+  <option value="Azores Standard Time">(UTC-01:00) Azores</option>
+  <option value="Cape Verde Standard Time">(UTC-01:00) Cabo Verde Is.</option>
+  <option value="UTC" selected="selected">(UTC) Coordinated Universal Time</option>
+  <option value="GMT Standard Time">(UTC+00:00) Dublin, Edinburgh, Lisbon, London</option>
+  <option value="Greenwich Standard Time">(UTC+00:00) Monrovia, Reykjavik</option>
+  <option value="Sao Tome Standard Time">(UTC+00:00) Sao Tome</option>
+  <option value="Morocco Standard Time">(UTC+01:00) Casablanca</option>
+  <option value="W. Europe Standard Time">(UTC+01:00) Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna</option>
+  <option value="Central Europe Standard Time">(UTC+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague</option>
+  <option value="Romance Standard Time">(UTC+01:00) Brussels, Copenhagen, Madrid, Paris</option>
+  <option value="Central European Standard Time">(UTC+01:00) Sarajevo, Skopje, Warsaw, Zagreb</option>
+  <option value="W. Central Africa Standard Time">(UTC+01:00) West Central Africa</option>
+  <option value="GTB Standard Time">(UTC+02:00) Athens, Bucharest</option>
+  <option value="Middle East Standard Time">(UTC+02:00) Beirut</option>
+  <option value="Egypt Standard Time">(UTC+02:00) Cairo</option>
+  <option value="E. Europe Standard Time">(UTC+02:00) Chisinau</option>
+  <option value="Syria Standard Time">(UTC+02:00) Damascus</option>
+  <option value="West Bank Standard Time">(UTC+02:00) Gaza, Hebron</option>
+  <option value="South Africa Standard Time">(UTC+02:00) Harare, Pretoria</option>
+  <option value="FLE Standard Time">(UTC+02:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius</option>
+  <option value="Israel Standard Time">(UTC+02:00) Jerusalem</option>
+  <option value="South Sudan Standard Time">(UTC+02:00) Juba</option>
+  <option value="Kaliningrad Standard Time">(UTC+02:00) Kaliningrad</option>
+  <option value="Sudan Standard Time">(UTC+02:00) Khartoum</option>
+  <option value="Libya Standard Time">(UTC+02:00) Tripoli</option>
+  <option value="Namibia Standard Time">(UTC+02:00) Windhoek</option>
+  <option value="Jordan Standard Time">(UTC+03:00) Amman</option>
+  <option value="Arabic Standard Time">(UTC+03:00) Baghdad</option>
+  <option value="Turkey Standard Time">(UTC+03:00) Istanbul</option>
+  <option value="Arab Standard Time">(UTC+03:00) Kuwait, Riyadh</option>
+  <option value="Belarus Standard Time">(UTC+03:00) Minsk</option>
+  <option value="Russian Standard Time">(UTC+03:00) Moscow, St. Petersburg</option>
+  <option value="E. Africa Standard Time">(UTC+03:00) Nairobi</option>
+  <option value="Volgograd Standard Time">(UTC+03:00) Volgograd</option>
+  <option value="Iran Standard Time">(UTC+03:30) Tehran</option>
+  <option value="Arabian Standard Time">(UTC+04:00) Abu Dhabi, Muscat</option>
+  <option value="Astrakhan Standard Time">(UTC+04:00) Astrakhan, Ulyanovsk</option>
+  <option value="Azerbaijan Standard Time">(UTC+04:00) Baku</option>
+  <option value="Russia Time Zone 3">(UTC+04:00) Izhevsk, Samara</option>
+  <option value="Mauritius Standard Time">(UTC+04:00) Port Louis</option>
+  <option value="Saratov Standard Time">(UTC+04:00) Saratov</option>
+  <option value="Georgian Standard Time">(UTC+04:00) Tbilisi</option>
+  <option value="Caucasus Standard Time">(UTC+04:00) Yerevan</option>
+  <option value="Afghanistan Standard Time">(UTC+04:30) Kabul</option>
+  <option value="West Asia Standard Time">(UTC+05:00) Ashgabat, Tashkent</option>
+  <option value="Ekaterinburg Standard Time">(UTC+05:00) Ekaterinburg</option>
+  <option value="Pakistan Standard Time">(UTC+05:00) Islamabad, Karachi</option>
+  <option value="Qyzylorda Standard Time">(UTC+05:00) Qyzylorda</option>
+  <option value="India Standard Time">(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi</option>
+  <option value="Sri Lanka Standard Time">(UTC+05:30) Sri Jayawardenepura</option>
+  <option value="Nepal Standard Time">(UTC+05:45) Kathmandu</option>
+  <option value="Central Asia Standard Time">(UTC+06:00) Astana</option>
+  <option value="Bangladesh Standard Time">(UTC+06:00) Dhaka</option>
+  <option value="Omsk Standard Time">(UTC+06:00) Omsk</option>
+  <option value="Myanmar Standard Time">(UTC+06:30) Yangon (Rangoon)</option>
+  <option value="SE Asia Standard Time">(UTC+07:00) Bangkok, Hanoi, Jakarta</option>
+  <option value="Altai Standard Time">(UTC+07:00) Barnaul, Gorno-Altaysk</option>
+  <option value="W. Mongolia Standard Time">(UTC+07:00) Hovd</option>
+  <option value="North Asia Standard Time">(UTC+07:00) Krasnoyarsk</option>
+  <option value="N. Central Asia Standard Time">(UTC+07:00) Novosibirsk</option>
+  <option value="Tomsk Standard Time">(UTC+07:00) Tomsk</option>
+  <option value="China Standard Time">(UTC+08:00) Beijing, Chongqing, Hong Kong, Urumqi</option>
+  <option value="North Asia East Standard Time">(UTC+08:00) Irkutsk</option>
+  <option value="Singapore Standard Time">(UTC+08:00) Kuala Lumpur, Singapore</option>
+  <option value="W. Australia Standard Time">(UTC+08:00) Perth</option>
+  <option value="Taipei Standard Time">(UTC+08:00) Taipei</option>
+  <option value="Ulaanbaatar Standard Time">(UTC+08:00) Ulaanbaatar</option>
+  <option value="Aus Central W. Standard Time">(UTC+08:45) Eucla</option>
+  <option value="Transbaikal Standard Time">(UTC+09:00) Chita</option>
+  <option value="Tokyo Standard Time">(UTC+09:00) Osaka, Sapporo, Tokyo</option>
+  <option value="North Korea Standard Time">(UTC+09:00) Pyongyang</option>
+  <option value="Korea Standard Time">(UTC+09:00) Seoul</option>
+  <option value="Yakutsk Standard Time">(UTC+09:00) Yakutsk</option>
+  <option value="Cen. Australia Standard Time">(UTC+09:30) Adelaide</option>
+  <option value="AUS Central Standard Time">(UTC+09:30) Darwin</option>
+  <option value="E. Australia Standard Time">(UTC+10:00) Brisbane</option>
+  <option value="AUS Eastern Standard Time">(UTC+10:00) Canberra, Melbourne, Sydney</option>
+  <option value="West Pacific Standard Time">(UTC+10:00) Guam, Port Moresby</option>
+  <option value="Tasmania Standard Time">(UTC+10:00) Hobart</option>
+  <option value="Vladivostok Standard Time">(UTC+10:00) Vladivostok</option>
+  <option value="Lord Howe Standard Time">(UTC+10:30) Lord Howe Island</option>
+  <option value="Bougainville Standard Time">(UTC+11:00) Bougainville Island</option>
+  <option value="Russia Time Zone 10">(UTC+11:00) Chokurdakh</option>
+  <option value="Magadan Standard Time">(UTC+11:00) Magadan</option>
+  <option value="Norfolk Standard Time">(UTC+11:00) Norfolk Island</option>
+  <option value="Sakhalin Standard Time">(UTC+11:00) Sakhalin</option>
+  <option value="Central Pacific Standard Time">(UTC+11:00) Solomon Is., New Caledonia</option>
+  <option value="Russia Time Zone 11">(UTC+12:00) Anadyr, Petropavlovsk-Kamchatsky</option>
+  <option value="New Zealand Standard Time">(UTC+12:00) Auckland, Wellington</option>
+  <option value="UTC+12">(UTC+12:00) Coordinated Universal Time+12</option>
+  <option value="Fiji Standard Time">(UTC+12:00) Fiji</option>
+  <option value="Chatham Islands Standard Time">(UTC+12:45) Chatham Islands</option>
+  <option value="UTC+13">(UTC+13:00) Coordinated Universal Time+13</option>
+  <option value="Tonga Standard Time">(UTC+13:00) Nuku'alofa</option>
+  <option value="Samoa Standard Time">(UTC+13:00) Samoa</option>
+  <option value="Line Islands Standard Time">(UTC+14:00) Kiritimati Island</option>
+</select></span>
+            </fieldset>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Partitioning and formatting:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="PartitionMode" value="Interactive" checked="checked" />
+          <span class="flex-column">
+            <span>Partition the disk interactively during Windows Setup or use existing partition</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="PartitionMode" value="Unattended" />
+          <span class="flex-column">
+            <span>Let Windows Setup wipe, partition and format your hard drive (more specifically, disk 0) using these settings:</span>
+            <fieldset>
+              <dl>
+                <dt>Choose partition layout:</dt>
+                <dd>
+                  <label class="flex-row">
+                    <input type="radio" name="PartitionLayout" value="GPT" checked="checked" />
+                    <span class="flex-column">
+                      <span>GPT</span>
+                      <span>The <a href="https://docs.microsoft.com/en-us/windows-hardware/manufacture/desktop/configure-uefigpt-based-hard-drive-partitions">GPT partition layout</a> must be used for UEFI systems.</span>
+                    </span>
+                  </label>
+                  <label class="flex-row">
+                    <input type="radio" name="PartitionLayout" value="MBR" />
+                    <span class="flex-column">
+                      <span>MBR</span>
+                      <span>The <a href="https://docs.microsoft.com/en-us/windows-hardware/manufacture/desktop/configure-biosmbr-based-hard-drive-partitions">MBR-based partition layout</a> must be used for legacy BIOS systems.</span>
+                    </span>
+                  </label>
+                </dd>
+                <dt>Choose how to install Windows Recovery Environment (Windows&#xA0;RE):</dt>
+                <dd>
+                  <label class="flex-row">
+                    <input type="radio" name="RecoveryMode" value="Partition" checked="checked" />
+                    <span class="flex-column">
+                      <span>Install on recovery partition</span>
+                      <span>This will create a separate partition with a size of <strong>1000&#160;MB</strong> and install Windows&#xA0;RE to it.</span>
+                    </span>
+                  </label>
+
+                  <label class="flex-row">
+                    <input type="radio" name="RecoveryMode" value="Folder" />
+                    <span class="flex-column">
+                      <span>Install on Windows partition</span>
+                      <span>This will install Windows&#xA0;RE in <code>C:\Recovery</code>. No recovery partition will be created.</span>
+                    </span>
+                  </label>
+
+                  <label class="flex-row">
+                    <input type="radio" name="RecoveryMode" value="None" />
+                    <span class="flex-column">
+                      <span>Remove Windows&#xA0;RE</span>
+                      <span>This will delete the <code>C:\Recovery</code> folder and thus free about 600&#160;MB of disk space. No recovery partition will be created.</span>
+                    </span>
+                  </label>
+                </dd>
+              </dl>
+            </fieldset>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Windows edition:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="WindowsEditionMode" value="Unattended" checked="checked" />
+          <fieldset class="flex-column">
+            <span>Use a generic product key to install this edition: <select name="WindowsEdition">
+  <option value="home">Home</option>
+  <option value="home_n">Home N</option>
+  <option value="education">Education</option>
+  <option value="education_n">Education N</option>
+  <option value="pro" selected="selected">Pro</option>
+  <option value="pro_n">Pro N</option>
+  <option value="pro_education">Pro Education</option>
+  <option value="pro_education_n">Pro Education N</option>
+  <option value="pro_workstations">Pro for Workstations</option>
+  <option value="pro_workstations_n">Pro N for Workstations</option>
+</select></span>
+            <span>This product key cannot be used to activate Windows. You can change the product key later.</span>
+          </fieldset>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="WindowsEditionMode" value="Interactive" />
+          <span class="flex-column">
+            <span>Enter your own product key during Windows Setup</span>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>User accounts:</th>
+      <td>
+
+        <label class="flex-row">
+          <input type="radio" name="UserAccountMode" value="Unattended" checked="checked" />
+          <span class="flex-column">
+            <span>Let Windows Setup create the following local accounts:</span>
+            <fieldset>
+
+              <table>
+  <tr>
+    <th>Account name</th>
+    <th>Password</th>
+    <th>Group</th>
+  </tr>
+  <tr>
+    <td>
+      <input type="text" name="AccountName0" value="Admin" />
+    </td>
+    <td>
+      <input type="text" name="AccountPassword0" value="password" />
+    </td>
+    <td>
+      <select name="AccountGroup0">
+        <option value="Administrators" selected="selected">Administrators</option>
+        <option value="Users">Users</option>
+      </select>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <input type="text" name="AccountName1" value="User" />
+    </td>
+    <td>
+      <input type="text" name="AccountPassword1" value="password" />
+    </td>
+    <td>
+      <select name="AccountGroup1">
+        <option value="Administrators">Administrators</option>
+        <option value="Users" selected="selected">Users</option>
+      </select>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <input type="text" name="AccountName2" value="" />
+    </td>
+    <td>
+      <input type="text" name="AccountPassword2" value="password" />
+    </td>
+    <td>
+      <select name="AccountGroup2">
+        <option value="Administrators">Administrators</option>
+        <option value="Users" selected="selected">Users</option>
+      </select>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <input type="text" name="AccountName3" value="" />
+    </td>
+    <td>
+      <input type="text" name="AccountPassword3" value="password" />
+    </td>
+    <td>
+      <select name="AccountGroup3">
+        <option value="Administrators">Administrators</option>
+        <option value="Users" selected="selected">Users</option>
+      </select>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <input type="text" name="AccountName4" value="" />
+    </td>
+    <td>
+      <input type="text" name="AccountPassword4" value="password" />
+    </td>
+    <td>
+      <select name="AccountGroup4">
+        <option value="Administrators">Administrators</option>
+        <option value="Users" selected="selected">Users</option>
+      </select>
+    </td>
+  </tr>
+</table>
+
+              <p>Some settings might not be applied until an administrator logs on for the first time. You should therefore let Windows log you on to an administrator account once – this does not affect subsequent logons. Choose which account to use for this:</p>
+
+              <label class="flex-row">
+                <input type="radio" name="AutoLogonMode" value="Own" checked="checked" />
+                <span class="flex-column">
+                  <span>Logon to the first administrator account created above</span>
+                </span>
+              </label>
+              <label class="flex-row">
+                <input type="radio" name="AutoLogonMode" value="Builtin" />
+                <span class="flex-column">
+                  <fieldset>
+                    <span>Activate built-in account <q>Administrator</q>, set its password to <input type="text" name="BuiltinAdministratorPassword" value="password" /> and logon to this account</span>
+                  </fieldset>
+                </span>
+              </label>
+              <label class="flex-row">
+                <input type="radio" name="AutoLogonMode" value="None" />
+                <span class="flex-column">
+                  <span>Do not logon</span>
+                  <span>The installation ends with the sign-in screen being shown.</span>
+                </span>
+              </label>
+
+
+
+            </fieldset>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="UserAccountMode" value="Interactive" />
+          <span class="flex-column">
+            <span>Add user accounts interactively during Windows Setup</span>
+            <span>Choose this if you want to use a Microsoft account.</span>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Account Lockout policy:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="LockoutMode" value="Default" checked="checked" />
+          <span class="flex-column">
+            <span>Use default policy</span>
+            <span>By default, Windows will lock out an account after <strong>10&#160;failed logon attempts</strong> (<q>threshold</q>) within <strong>10&#160;minutes</strong> (<q>window</q>). After <strong>10&#160;minutes</strong> (<q>duration</q>), the account is unlocked automatically.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="LockoutMode" value="Disabled" />
+          <span class="flex-column">
+            <span>Disable policy</span>
+            <span class="Warning">Disabling Account Lockout might leave your computer vulnerable to brute-force attacks.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="LockoutMode" value="Custom" />
+          <span class="flex-column">
+            <span>Use custom policy:</span>
+            <fieldset>
+              <span>Lock out an account after <input type="number" name="LockoutThreshold" value="10" min="0" max="999" required="required" /> failed logon attempts within <input type="number" name="LockoutWindow" value="10" min="1" max="99999" required="required" /> minutes. After <input type="number" name="LockoutDuration" value="10" min="1" max="99999" required="required" /> minutes, unlock the account automatically.</span>
+            </fieldset>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Optimizations:</th>
+      <td>
+        <label class="flex-row">
+          <input type="checkbox" name="DisableDefender" value="true" />
+          <span class="flex-column">
+            <span>Disable Windows Defender</span>
+            <span>This disables certain services (<code>Sense</code>, <code>WdBoot</code>, <code>WdFilter</code>, <code>WdNisDrv</code>, <code>WdNisSvc</code>, <code>WinDefend</code>) during Windows Setup. A reboot might be required to stop these services. The method to disable Windows Defender on Windows 11 was adapted from an article by <a href="https://lazyadmin.nl/win-11/turn-off-windows-defender-windows-11-permanently/">Rudy Mens</a>.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="DisableSystemRestore" value="true" />
+          <span class="flex-column">
+            <span>Disable System Protection&#x2009;/&#x2009;System Restore</span>
+            <span>Windows will not create restore points for drive C: and thus use less disk space.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="EnableLongPaths" value="true" />
+          <span class="flex-column">
+            <span>Enable <a href="https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation#enable-long-paths-in-windows-10-version-1607-and-later">long paths</a> with up to 32,767 characters</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="EnableRemoteDesktop" value="true" />
+          <span class="flex-column">
+            <span>Enable Remote Desktop services (RDP)</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="HardenSystemDriveAcl" value="true" />
+          <span class="flex-column">
+            <span>Harden ACLs so that users cannot create folders in <code>C:\</code></span>
+            <span>This removes write permissions for the <em>Authenticated Users</em> group. In particular, this prevents users from creating bogus folders such as <code class="nowrap">C:\Windows </code>.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="AllowPowerShellScripts" value="true" />
+          <span class="flex-column">
+            <span>Allow <a href="https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/set-executionpolicy">execution</a> of Windows PowerShell script files (<code>.ps1</code>)</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="DisableLastAccess" value="true" />
+          <span class="flex-column">
+            <span>Do not update the <a href="https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/fsutil-behavior">Last Access Time stamp</a> on files and folders</span>
+            <span>This can improve file system performance.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="NoAutoRebootWithLoggedOnUsers" value="true" />
+          <span class="flex-column">
+            <span><a href="https://learn.microsoft.com/en-us/windows/deployment/update/waas-restart">Prevent automatic restarts</a> by Windows Update when a user is signed in</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="TurnOffSystemSounds" value="true" />
+          <span class="flex-column">
+            <span>Turn off system sounds</span>
+            <span>This changes the sound scheme from <em>Windows Default</em> to <em>No sounds</em>.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="RunScriptOnFirstLogon" value="true" />
+          <span class="flex-column">
+            <span>Run shell script when users log on for the first time</span>
+            <span>Similiar to <a href="https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/add-a-custom-script-to-windows-setup">SetupComplete.cmd</a>, this will execute the file <code>C:\<wbr />Windows\<wbr />Setup\<wbr />Scripts\<wbr />UserFirstLogon.cmd</code> whenever a user logs on for the first time. Note that you can place these files in the <code>sources\$OEM$\$1\<wbr />Windows\<wbr />Setup\<wbr />Scripts</code> directory <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/wsim/distribution-shares-and-configuration-sets-overview#oem-folders">of your Windows installation disk</a>.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="DisableAppSuggestions" value="true" />
+          <span class="flex-column">
+            <span>Disable automatic installation of <a href="https://skanthak.homepage.t-online.de/ten.html#eighth">suggested apps</a></span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="checkbox" name="ProcessAudit" value="true" />
+          <span class="flex-column">
+            <span>Audit <a href='/windows/process-audit/' hreflang='en'>process creation</a> events</span>
+            <label class="flex-row">
+              <input type="checkbox" name="ProcessAuditCommandLine" value="true" />
+              <span class="flex-column">
+                <span>Include command line in log entries</span>
+              </span>
+            </label>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Wi-Fi setup:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="WifiMode" value="Interactive" checked="checked" />
+          <span class="flex-column">
+            <span>Configure Wi-Fi interactively during Windows Setup</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="WifiMode" value="Skip" />
+          <span class="flex-column">
+            <span>Skip Wi-Fi configuration</span>
+            <span>Choose this if you have a wired connection to the internet.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="WifiMode" value="Unattended" />
+          <span class="flex-column">
+            <span>Configure Wi-Fi using these settings:</span>
+            <fieldset>
+              <dl>
+                <dt>Network name (SSID):</dt>
+                <dd><input type="text" name="WifiName" value="" minlength="1" maxlength="32" required="required" /></dd>
+                <dd>
+                  <label class="flex-row">
+                    <input type="checkbox" name="WifiNonBroadcast" value="true" />
+                    <span class="flex-column">
+                      <span>Connect even if this network is not broadcasting</span>
+                    </span>
+                  </label>
+                </dd>
+                <dt>Authentication:</dt>
+                <dd><select name="WifiAuthentication" required="required">
+  <option value="Open" selected="selected">Open</option>
+  <option value="WPA2PSK">WPA2-Personal AES</option>
+  <option value="WPA3SAE">WPA3-Personal AES</option>
+</select></dd>
+                <dt>Password:</dt>
+                <dd><input type="text" name="WifiPassword" value="00000000" maxlength="63" /></dd>
+                <dd class="Warning">
+                  You should not enter your actual Wi-Fi password here. Obfuscate letters and digits, but keep special characters (such as <code class="nowrap">^ &amp; | &lt; &gt;</code>) unchanged as these require non-trivial escaping. Once you have downloaded the <code>autounattend.xml</code> file, find the password enclosed between <code class="nowrap">keyMaterial^&amp;gt;</code> and <code class="nowrap">^&amp;lt;/keyMaterial</code> and adjust it.
+                </dd>
+              </dl>
+            </fieldset>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Express settings:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="ExpressSettings" value="DisableAll" checked="checked" />
+          <span class="flex-column">
+            <span>Disable all</span>
+            <span>Windows will not send diagnostic data, personalized input or your location history to Microsoft. Choose this if you value privacy.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="ExpressSettings" value="EnableAll" />
+          <span class="flex-column">
+            <span>Enable all</span>
+            <span>Windows will send data to Microsoft to provide location-based services, improve language recognition, and show more personalized ads.</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="ExpressSettings" value="Interactive" />
+          <span class="flex-column">
+            <span>Choose settings interactively during Windows Setup</span>
+            <span>This lets you enable some settings while disabling others.</span>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Remove bloatware:</th>
+      <td>
+        <p>Windows comes with several apps that many users do not want or do not need. Check all the apps you want removed during Windows Setup:</p>
+
+        <p>
+          <input type="button" value="Select all" id="SelectAllBloatwares" />
+          <input type="button" value="Deselect all" id="DeselectAllBloatwares" />
+        </p>
+
+        <div class="Bloatwares">
+  <label title="Microsoft.Microsoft3DViewer">
+    <input name="Remove3DViewer" type="checkbox" value="true" /> 3D Viewer</label>
+  <label title="Microsoft.WindowsCalculator">
+    <input name="RemoveCalculator" type="checkbox" value="true" /> Calculator</label>
+  <label title="Microsoft.WindowsCamera">
+    <input name="RemoveCamera" type="checkbox" value="true" /> Camera</label>
+  <label title="Clipchamp.Clipchamp">
+    <input name="RemoveClipchamp" type="checkbox" value="true" /> Clipchamp</label>
+  <label title="Microsoft.WindowsAlarms">
+    <input name="RemoveClock" type="checkbox" value="true" /> Clock</label>
+  <label title="Microsoft.549981C3F5F10">
+    <input name="RemoveCortana" type="checkbox" value="true" /> Cortana</label>
+  <label>
+    <input name="RemoveDevHome" type="checkbox" value="true" /> <strong>Dev Home (since 23H2)</strong></label>
+  <label title="Microsoft.WindowsFeedbackHub">
+    <input name="RemoveFeedbackHub" type="checkbox" value="true" /> Feedback Hub</label>
+  <label title="Microsoft.GetHelp">
+    <input name="RemoveGetHelp" type="checkbox" value="true" /> Get Help</label>
+  <label title="Browser.InternetExplorer">
+    <input name="RemoveInternetExplorer" type="checkbox" value="true" /> Internet Explorer</label>
+  <label title="Microsoft.WindowsMaps">
+    <input name="RemoveMaps" type="checkbox" value="true" /> Maps</label>
+  <label title="MathRecognizer">
+    <input name="RemoveMathInputPanel" type="checkbox" value="true" /> Math Input Panel</label>
+  <label title="Microsoft.ZuneVideo">
+    <input name="RemoveZuneVideo" type="checkbox" value="true" /> Movies &amp; TV</label>
+  <label title="Microsoft.BingNews">
+    <input name="RemoveNews" type="checkbox" value="true" /> News</label>
+  <label title="Microsoft.Windows.Notepad">
+    <input name="RemoveNotepadClassic" type="checkbox" value="true" /> Notepad (classic)</label>
+  <label title="Microsoft.WindowsNotepad">
+    <input name="RemoveNotepad" type="checkbox" value="true" /> Notepad (modern)</label>
+  <label title="Microsoft.MicrosoftOfficeHub">
+    <input name="RemoveOffice365" type="checkbox" value="true" /> Office 365</label>
+  <label>
+    <input name="RemoveOneDrive" type="checkbox" value="true" /> OneDrive</label>
+  <label title="Microsoft.Office.OneNote">
+    <input name="RemoveOneNote" type="checkbox" value="true" /> OneNote</label>
+  <label title="OpenSSH.Client">
+    <input name="RemoveOpenSSHClient" type="checkbox" value="true" /> OpenSSH Client</label>
+  <label>
+    <input name="RemoveOutlook" type="checkbox" value="true" /> <strong>Outlook for Windows (since 23H2)</strong></label>
+  <label title="Microsoft.Windows.MSPaint, Microsoft.Paint">
+    <input name="RemovePaint" type="checkbox" value="true" /> Paint</label>
+  <label title="Microsoft.MSPaint">
+    <input name="RemovePaint3D" type="checkbox" value="true" /> Paint 3D</label>
+  <label title="Microsoft.People">
+    <input name="RemovePeople" type="checkbox" value="true" /> People</label>
+  <label title="Microsoft.Windows.Photos">
+    <input name="RemovePhotos" type="checkbox" value="true" /> Photos</label>
+  <label title="Microsoft.PowerAutomateDesktop">
+    <input name="RemovePowerAutomate" type="checkbox" value="true" /> Power Automate</label>
+  <label title="Microsoft.Windows.PowerShell.ISE">
+    <input name="RemovePowerShellISE" type="checkbox" value="true" /> PowerShell ISE</label>
+  <label title="App.Support.QuickAssist, MicrosoftCorporationII.QuickAssist">
+    <input name="RemoveQuickAssist" type="checkbox" value="true" /> Quick Assist</label>
+  <label title="Microsoft.SkypeApp">
+    <input name="RemoveSkype" type="checkbox" value="true" /> Skype</label>
+  <label title="Microsoft.ScreenSketch">
+    <input name="RemoveSnippingTool" type="checkbox" value="true" /> Snipping Tool</label>
+  <label title="Microsoft.MicrosoftSolitaireCollection">
+    <input name="RemoveSolitaire" type="checkbox" value="true" /> Solitaire Collection</label>
+  <label title="App.StepsRecorder">
+    <input name="RemoveStepsRecorder" type="checkbox" value="true" /> Steps Recorder</label>
+  <label title="Microsoft.MicrosoftStickyNotes">
+    <input name="RemoveStickyNotes" type="checkbox" value="true" /> Sticky Notes</label>
+  <label>
+    <input name="RemoveTeams" type="checkbox" value="true" /> Teams</label>
+  <label title="Microsoft.Getstarted">
+    <input name="RemoveGetStarted" type="checkbox" value="true" /> Tips</label>
+  <label title="Microsoft.Todos">
+    <input name="RemoveToDo" type="checkbox" value="true" /> To Do</label>
+  <label title="Microsoft.WindowsSoundRecorder">
+    <input name="RemoveVoiceRecorder" type="checkbox" value="true" /> Voice Recorder</label>
+  <label title="Microsoft.BingWeather">
+    <input name="RemoveWeather" type="checkbox" value="true" /> Weather</label>
+  <label title="Media.WindowsMediaPlayer">
+    <input name="RemoveWindowsMediaPlayer" type="checkbox" value="true" /> Windows Media Player (classic)</label>
+  <label title="Microsoft.ZuneMusic">
+    <input name="RemoveZuneMusic" type="checkbox" value="true" /> Windows Media Player (modern)</label>
+  <label title="Microsoft.WindowsTerminal">
+    <input name="RemoveWindowsTerminal" type="checkbox" value="true" /> Windows Terminal</label>
+  <label title="Microsoft.Windows.WordPad">
+    <input name="RemoveWordPad" type="checkbox" value="true" /> WordPad</label>
+  <label title="Microsoft.Xbox.TCUI, Microsoft.XboxApp, Microsoft.XboxGameOverlay, Microsoft.XboxGamingOverlay, Microsoft.XboxIdentityProvider, Microsoft.XboxSpeechToTextOverlay, Microsoft.GamingApp">
+    <input name="RemoveXboxApps" type="checkbox" value="true" /> Xbox Apps</label>
+  <label title="Microsoft.YourPhone">
+    <input name="RemoveYourPhone" type="checkbox" value="true" /> Your Phone</label>
+</div>
+
+        <p class="Warning">If you select one or more apps to remove, <em>all</em> shortcuts, tiles and pinned icons in the start menu will be deleted, utilizing a technique <a href="https://oofhours.com/2021/10/27/customize-the-windows-11-start-menu/">demonstrated by Michael Niehaus</a>. This is to prevent a user from accidentally reinstalling an app that has just been removed. The method to completely remove OneDrive was described by <a href="https://skanthak.homepage.t-online.de/ten.html#seventh">Stefan Kanthak</a>, which whom I also collaborated to <a href="https://groups.google.com/g/de.comp.os.ms-windows.misc/c/4JNjdtLA9Z8">identify the registry keys</a> that block the installation of <em>Dev Home</em> and <em>Outlook for Windows</em>.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Windows Defender Application Control:</th>
+      <td>
+        <label class="flex-row">
+          <input type="radio" name="WdacMode" value="Skip" checked="checked" />
+          <span class="flex-column">
+            <span>Do not configure <a href="https://learn.microsoft.com/en-us/windows/security/application-security/application-control/windows-defender-application-control/">WDAC</a> policy</span>
+          </span>
+        </label>
+        <label class="flex-row">
+          <input type="radio" name="WdacMode" value="Configure" />
+          <span class="flex-column">
+            <span>Configure a basic WDAC policy using these settings:</span>
+            <fieldset>
+              <dl>
+                <dt>
+                  Applications in <code>C:\Windows</code>, <code>C:\Program Files</code> and <code>C:\Program Files (x86)</code> are allowed to run. Applications stored elsewhere and those in known user-writable folders such as <code>C:\Windows\Temp</code> or <code>C:\Windows\Debug\WIA</code> are not allowed to run. To create a more customized policy, see my <a href='/windows/wdac-policy-generator/' hreflang='en'>online WDAC generator</a>.
+                </dt>
+                <dt>Choose how to enforce the policy:</dt>
+                <dd>
+                  <label class="flex-row">
+                    <input type="radio" name="WdacAuditMode" value="Auditing" />
+                    <span class="flex-column">
+                      <span>Auditing mode</span>
+                      <span>Logs drivers and applications that would have been blocked.</span>
+                    </span>
+                  </label>
+                  <label class="flex-row">
+                    <input type="radio" name="WdacAuditMode" value="AuditingOnBootFailure" checked="checked" />
+                    <span class="flex-column">
+                      <span>Auditing mode on boot failure</span>
+                      <span>When the policy blocks a system driver and thus would prevent Windows from booting, use audit mode. Otherwise, use enforcement mode.</span>
+                    </span>
+                  </label>
+                  <label class="flex-row">
+                    <input type="radio" name="WdacAuditMode" value="Enforcement" />
+                    <span class="flex-column">
+                      <span>Enforcement mode</span>
+                      <span>Drivers and applications will be blocked unless allowed by the policy.</span>
+                    </span>
+                  </label>
+                </dd>
+
+                <dt>Choose script enforcement:</dt>
+                <dd>
+                  <label class="flex-row">
+                    <input type="radio" name="WdacScriptMode" value="Restricted" checked="checked" />
+                    <span class="flex-column">
+                      <span>Restricted</span>
+                      <span>PowerShell will run in <strong>Constrained Language Mode</strong>. See <a href="https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-defender-application-control/design/script-enforcement">Script Enforcement</a> for details.</span>
+                    </span>
+                  </label>
+                  <label class="flex-row">
+                    <input type="radio" name="WdacScriptMode" value="Unrestricted" />
+                    <span class="flex-column">
+                      <span>Unrestricted</span>
+                      <span>PowerShell will run in <strong>Full Language Mode</strong>.</span>
+                    </span>
+                  </label>
+                </dd>
+                <dt>To disable this WDAC policy later, simply delete the file <code>C:\<wbr />Windows\<wbr />System32\<wbr />CodeIntegrity\<wbr />CiPolicies\<wbr />Active\{d26bff32-33a2-48a3-b037-10357ee48427}.cip</code> and reboot.</dt>
+              </dl>
+            </fieldset>
+          </span>
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <th>Placeholders for more components:</th>
+      <td>
+        <p>This service can optionally generate templates for <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/components-b-unattend">all available components</a>, with respect to their valid configuration passes. Look for <code>&lt;!--Placeholder--&gt;</code> comments in the generated <code>autounattend.xml</code> file and fill in the desired settings yourself.</p>
+
+        <dl class="Components">
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-audio-audiocore">Microsoft-Windows-Audio-AudioCore</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Audio-AudioCore" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-audio-volumecontrol">Microsoft-Windows-Audio-VolumeControl</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Audio-VolumeControl" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-authentication-authui">Microsoft-Windows-Authentication-AuthUI</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Authentication-AuthUI" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-blb-wsb-online-main">Microsoft-Windows-BLB-WSB-Online-Main</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-BLB-WSB-Online-Main" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-BLB-WSB-Online-Main" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-browserservice">Microsoft-Windows-BrowserService</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-BrowserService" value="generalize" /> generalize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-codeintegrity">Microsoft-Windows-CodeIntegrity</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-CodeIntegrity" value="offlineServicing" /> offlineServicing</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-coremmres">Microsoft-Windows-CoreMmRes</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-CoreMmRes" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-CoreMmRes" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-CoreMmRes" value="auditSystem" /> auditSystem</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-CoreMmRes" value="auditUser" /> auditUser</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-CoreMmRes" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-deployment">Microsoft-Windows-Deployment</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Deployment" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Deployment" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Deployment" value="auditSystem" /> auditSystem</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Deployment" value="auditUser" /> auditUser</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Deployment" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-deviceaccess">Microsoft-Windows-DeviceAccess</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-DeviceAccess" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-deviceguard-unattend">Microsoft-Windows-DeviceGuard-Unattend</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-DeviceGuard-Unattend" value="offlineServicing" /> offlineServicing</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-diagcpl">Microsoft-Windows-DiagCpl</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-DiagCpl" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-DiagCpl" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-DiagCpl" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-disk-failure-diagnostic-module">Microsoft-Windows-Disk-Failure-Diagnostic-Module</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Disk-Failure-Diagnostic-Module" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Disk-Failure-Diagnostic-Module" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Disk-Failure-Diagnostic-Module" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-dns-client">Microsoft-Windows-DNS-Client</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-DNS-Client" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-embedded-bootexp">Microsoft-Windows-Embedded-BootExp</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Embedded-BootExp" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Embedded-BootExp" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-embedded-embeddedlogon">Microsoft-Windows-Embedded-EmbeddedLogon</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Embedded-EmbeddedLogon" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Embedded-EmbeddedLogon" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-embedded-keyboardfilterservice">Microsoft-Windows-Embedded-KeyboardFilterService</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Embedded-KeyboardFilterService" value="offlineServicing" /> offlineServicing</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-embedded-shelllauncher">Microsoft-Windows-Embedded-ShellLauncher</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Embedded-ShellLauncher" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-embedded-unifiedwritefilter">Microsoft-Windows-Embedded-UnifiedWriteFilter</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Embedded-UnifiedWriteFilter" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-enhancedstorage-adm">Microsoft-Windows-EnhancedStorage-Adm</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-EnhancedStorage-Adm" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-errorreportingcore">Microsoft-Windows-ErrorReportingCore</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-ErrorReportingCore" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-fax-service">Microsoft-Windows-Fax-Service</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Fax-Service" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-gpiobuttons">Microsoft-Windows-GPIOButtons</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-GPIOButtons" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-GPIOButtons" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-helpandsupport">Microsoft-Windows-HelpAndSupport</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-HelpAndSupport" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-HelpAndSupport" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-ie-clientnetworkprotocolimplementation">Microsoft-Windows-IE-ClientNetworkProtocolImplementation</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-IE-ClientNetworkProtocolImplementation" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-ie-esc">Microsoft-Windows-IE-ESC</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-IE-ESC" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-ie-internetexplorer">Microsoft-Windows-IE-InternetExplorer</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-IE-InternetExplorer" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-international-core">Microsoft-Windows-International-Core</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-International-Core" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-International-Core" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-international-core-winpe">Microsoft-Windows-International-Core-WinPE</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-International-Core-WinPE" value="windowsPE" /> windowsPE</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-lua-settings">Microsoft-Windows-LUA-Settings</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-LUA-Settings" value="offlineServicing" /> offlineServicing</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-mapcontrol">Microsoft-Windows-MapControl-Desktop</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-MapControl-Desktop" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-MapControl-Desktop" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-mediaplayer-core">Microsoft-Windows-MediaPlayer-Core</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-MediaPlayer-Core" value="offlineServicing" /> offlineServicing</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-microsoftedgebrowser">Microsoft-Windows-MicrosoftEdgeBrowser</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-MicrosoftEdgeBrowser" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-mobilepc-sensors-api">Microsoft-Windows-MobilePC-Sensors-API</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-MobilePC-Sensors-API" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-netbt">Microsoft-Windows-NetBT</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-NetBT" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-networkbridge">Microsoft-Windows-NetworkBridge</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-NetworkBridge" value="generalize" /> generalize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-networkloadbalancing-core">Microsoft-Windows-NetworkLoadBalancing-Core</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-NetworkLoadBalancing-Core" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-outofboxexperience">Microsoft-Windows-OutOfBoxExperience</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-OutOfBoxExperience" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-OutOfBoxExperience" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-partitionmanager">Microsoft-Windows-PartitionManager</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PartitionManager" value="offlineServicing" /> offlineServicing</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-pnpcustomizationsnonwinpe">Microsoft-Windows-PnpCustomizationsNonWinPE</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PnpCustomizationsNonWinPE" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PnpCustomizationsNonWinPE" value="auditSystem" /> auditSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-pnpcustomizationswinpe">Microsoft-Windows-PnpCustomizationsWinPE</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PnpCustomizationsWinPE" value="windowsPE" /> windowsPE</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-pnpsysprep">Microsoft-Windows-PnpSysprep</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PnpSysprep" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PnpSysprep" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-powercpl">Microsoft-Windows-PowerCPL</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PowerCPL" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-PowerCPL" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-printing-spooler-core">Microsoft-Windows-Printing-Spooler-Core</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Printing-Spooler-Core" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-rasserver">Microsoft-Windows-RasServer</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-RasServer" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-remoteassistance-exe">Microsoft-Windows-RemoteAssistance-Exe</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-RemoteAssistance-Exe" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-securestartup-filterdriver">Microsoft-Windows-SecureStartup-FilterDriver</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SecureStartup-FilterDriver" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SecureStartup-FilterDriver" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SecureStartup-FilterDriver" value="auditSystem" /> auditSystem</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SecureStartup-FilterDriver" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-security-spp">Microsoft-Windows-Security-SPP</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Security-SPP" value="generalize" /> generalize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-security-spp-ux">Microsoft-Windows-Security-SPP-UX</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Security-SPP-UX" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-servermanager-svrmgrnc">Microsoft-Windows-ServerManager-SvrMgrNc</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-ServerManager-SvrMgrNc" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-ServerManager-SvrMgrNc" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-setup">Microsoft-Windows-Setup</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Setup" value="windowsPE" /> windowsPE</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-sharedaccess">Microsoft-Windows-SharedAccess</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SharedAccess" value="generalize" /> generalize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-shell-setup">Microsoft-Windows-Shell-Setup</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Shell-Setup" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Shell-Setup" value="windowsPE" /> windowsPE</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Shell-Setup" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Shell-Setup" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Shell-Setup" value="auditSystem" /> auditSystem</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Shell-Setup" value="auditUser" /> auditUser</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Shell-Setup" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-shwebsvc">Microsoft-Windows-SHWebSVC</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SHWebSVC" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-smbserver">Microsoft-Windows-SMBServer</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SMBServer" value="generalize" /> generalize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-snmp-agent-service">Microsoft-Windows-SNMP-Agent-Service</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SNMP-Agent-Service" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SNMP-Agent-Service" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-sqmapi">Microsoft-Windows-SQMAPI</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SQMAPI" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-stobject">Microsoft-Windows-STObject</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-STObject" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-STObject" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-storport-registrysettings">Microsoft-Windows-StorPort-RegistrySettings</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-StorPort-RegistrySettings" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-StorPort-RegistrySettings" value="auditSystem" /> auditSystem</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-StorPort-RegistrySettings" value="auditUser" /> auditUser</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-StorPort-RegistrySettings" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-systemmaintenanceservice">Microsoft-Windows-SystemMaintenanceService</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SystemMaintenanceService" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-systemrestore-main">Microsoft-Windows-SystemRestore-Main</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SystemRestore-Main" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-systemsettingsthreshold">Microsoft-Windows-SystemSettingsThreshold</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SystemSettingsThreshold" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-SystemSettingsThreshold" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-tabletpc-platform-input-core">Microsoft-Windows-TabletPC-Platform-Input-Core</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TabletPC-Platform-Input-Core" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TabletPC-Platform-Input-Core" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TabletPC-Platform-Input-Core" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-tapisetup">Microsoft-Windows-TapiSetup</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TapiSetup" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-tcpip">Microsoft-Windows-TCPIP</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TCPIP" value="windowsPE" /> windowsPE</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TCPIP" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-terminalservices-centralpublishing">Microsoft-Windows-TerminalServices-CentralPublishing</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-CentralPublishing" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-terminalservices-licenseserver">Microsoft-Windows-TerminalServices-LicenseServer</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-LicenseServer" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-terminalservices-localsessionmanager">Microsoft-Windows-TerminalServices-LocalSessionManager</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-LocalSessionManager" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-LocalSessionManager" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-LocalSessionManager" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-terminalservices-publishing-wmiprovider">Microsoft-Windows-TerminalServices-Publishing-WMIProvider</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-Publishing-WMIProvider" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-Publishing-WMIProvider" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-Publishing-WMIProvider" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-terminalservices-rdp-winstationextensions">Microsoft-Windows-TerminalServices-RDP-WinStationExtensions</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-RDP-WinStationExtensions" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-RDP-WinStationExtensions" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-terminalservices-remoteconnectionmanager">Microsoft-Windows-TerminalServices-RemoteConnectionManager</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-RemoteConnectionManager" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-RemoteConnectionManager" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TerminalServices-RemoteConnectionManager" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-tpm-tasks">Microsoft-Windows-Tpm-Tasks</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-Tpm-Tasks" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-twinui">Microsoft-Windows-TwinUI</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TwinUI" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TwinUI" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-TwinUI" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-unattendedjoin">Microsoft-Windows-UnattendedJoin</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-UnattendedJoin" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-UnattendedJoin" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-wdf-kernel-library">Microsoft-Windows-WDF-KernelLibrary</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WDF-KernelLibrary" value="offlineServicing" /> offlineServicing</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-wifinetworkmanager">Microsoft-Windows-WiFiNetworkManager</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WiFiNetworkManager" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WiFiNetworkManager" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WiFiNetworkManager" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-winre-recoveryagent">Microsoft-Windows-WinRE-RecoveryAgent</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WinRE-RecoveryAgent" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-wlansvc">Microsoft-Windows-WLANSVC</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WLANSVC" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WLANSVC" value="windowsPE" /> windowsPE</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WLANSVC" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WLANSVC" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-workstationservice">Microsoft-Windows-WorkstationService</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WorkstationService" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WorkstationService" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-wpd-busenumservice">Microsoft-Windows-WPD-BusEnumService</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WPD-BusEnumService" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-wwanui">Microsoft-Windows-WWANUI</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WWANUI" value="generalize" /> generalize</label>
+    <label>
+      <input type="checkbox" name="Microsoft-Windows-WWANUI" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/networking-mpssvc-svc">Networking-MPSSVC-Svc</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Networking-MPSSVC-Svc" value="specialize" /> specialize</label>
+  </dd>
+  <dt>
+    <a href="https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/security-malware-windows-defender">Security-Malware-Windows-Defender</a>
+  </dt>
+  <dd>
+    <label>
+      <input type="checkbox" name="Security-Malware-Windows-Defender" value="offlineServicing" /> offlineServicing</label>
+    <label>
+      <input type="checkbox" name="Security-Malware-Windows-Defender" value="specialize" /> specialize</label>
+    <label>
+      <input type="checkbox" name="Security-Malware-Windows-Defender" value="oobeSystem" /> oobeSystem</label>
+  </dd>
+</dl>
+      </td>
+    </tr>
+    <tr>
+      <td></td>
+      <td>
+        <input type="submit" value="Bookmark selection" formaction="/windows/unattend-generator/" />
+        <input type="submit" value="View file" formaction="/windows/unattend-generator/view/" />
+        <input type="submit" value="Download file" formaction="/windows/unattend-generator/download/" />
+      </td>
+    </tr>
+  </table>
+</form>
+
+  <div class="Footer">
+Contact:    <a href="/christoph/">Christoph Schneegans</a> (<a href="mailto:Christoph%20Schneegans%20%3Cchristoph%40schneegans.de%3E">christoph@schneegans.de</a>)
+  </div>
+</body>
+</html>

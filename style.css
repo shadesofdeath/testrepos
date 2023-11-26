@@ -1,0 +1,270 @@
+ul.toc {
+    padding: 5px;
+    margin: 5px;
+    border: 1px solid #000;
+    background: #EEE;
+    list-style-type: none;
+    display: inline-block;
+}
+
+    ul.toc ul {
+        display: none;
+    }
+
+.Good {
+    background-color: rgb(204, 255, 204);
+}
+
+.Bad {
+    background-color: rgb(255, 221, 221);
+}
+
+body > del, div > del {
+    background-color: rgb(255, 221, 221);
+    display: block;
+}
+
+body > ins, div > ins {
+    background-color: rgb(204, 255, 204);
+    display: block;
+}
+
+table {
+    margin-bottom: 2px;
+}
+
+table, tfoot, tbody, tr, td, th {
+    border-collapse: collapse;
+    border: 1px solid black;
+}
+
+td, th {
+    padding: 4px 4px;
+}
+
+.Menupath {
+    font-variant: small-caps;
+    font-style: normal;
+}
+
+    .Menupath span:not(:first-child):before {
+        content: "→\0000A0";
+    }
+
+a img {
+    border: none;
+    margin: 10px;
+}
+
+img.Portrait {
+    text-align: right;
+    float: right;
+    margin: 10px;
+    border: thin solid #000;
+}
+
+img.Logo {
+    text-align: right;
+    float: right;
+}
+
+img.Screenshot, img.Foto {
+    margin: auto;
+    display: block;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    height: auto;
+}
+
+img {
+    max-width: 100%;
+}
+
+    img.Foto {
+        border: thin solid #000;
+    }
+
+code {
+    font-family: 'Lucida Console', monospace;
+}
+
+:not(a, h1, h2, h3, h4, h5, h6, pre) > code {
+    color: black;
+    background-color: rgb(230, 230, 230);
+}
+
+.Code {
+    margin: 0.5em;
+    position: relative;
+}
+
+    .Code > pre {
+        border: thin solid black;
+        overflow: auto;
+        padding: 1.5em;
+        margin: 0;
+        color: #000;
+        background-color: #EEE;
+        display: block;
+    }
+
+    .Code a.DownloadLink {
+        padding: 0.3em;
+        position: absolute;
+        top: 0px;
+        right: 0px;
+        border: thin solid rgb(0,0,0);
+        border-bottom-left-radius: 10px;
+        background-color: #F8F8F8;
+    }
+
+        .Code a.DownloadLink:before {
+            content: "↓\0000A0";
+        }
+
+    .Code.dos > pre {
+        color: rgb(204, 204, 204);
+        background-color: rgb(0,0,0);
+    }
+
+    .Code.dos > * {
+        border-color: rgb(0,0,0);
+    }
+
+    .Code.powershell > pre {
+        color: rgb(238, 237, 240);
+        background-color: rgb(1,36,86);
+    }
+
+    .Code.powershell > * {
+        border-color: rgb(1,36,86);
+    }
+
+    .Code.preline > pre {
+        white-space: pre-line;
+    }
+
+blockquote p {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+html, body {
+    color: #000;
+    background: #F8F8F8;
+    font-family: 'Lucida Sans Unicode', sans-serif;
+}
+
+h1 {
+    color: #FFF;
+    background: hsl(218deg, 66%, 60%) linear-gradient(to right, hsl(218deg, 66%, 60%), hsl(218deg, 66%, 40%));
+    padding: 4px;
+    padding-left: 5%;
+    margin-top: 0px;
+    margin-bottom: 0px;
+}
+
+h2 {
+    color: #B22;
+    background: #F8F8F8;
+}
+
+ul {
+    list-style-type: disc;
+}
+
+    ul li ul {
+        list-style-type: circle;
+    }
+
+        ul li ul li ul {
+            list-style-type: square;
+        }
+
+            ul li ul li ul li ul {
+                list-style-type: none;
+            }
+
+abbr[title], acronym[title] {
+    cursor: help;
+}
+
+[lang|='de'] > * {
+    quotes: "„" "“" "‚" "‘";
+}
+
+div.note, div.warning {
+    border: 1px solid #BBB;
+    margin: 1em;
+    padding: 0.8em;
+    border-radius: 10px;
+}
+
+.note::before, .warning::before {
+    font-size: 1.3em;
+    display: block;
+}
+
+*[lang|='de'] .note::before {
+    content: "⚠ Hinweis";
+}
+
+*[lang|='en'] .note::before {
+    content: "⚠ Note";
+}
+
+*[lang|='de'] .warning::before {
+    content: "⚠ Achtung";
+}
+
+*[lang|='en'] .warning::before {
+    content: "⚠ Warning";
+}
+
+q:before {
+    content: "„";
+}
+
+q:after {
+    content: "“";
+}
+
+em.Ironie, em.Name, dfn, q {
+    font-style: normal;
+}
+
+a[href^="http:"]:before, a[href^="https:"]:before, a[href^="ftp:"]:before {
+    content: "↗\0000A0";
+}
+
+a[href^="mailto:"]:before, a[href^="news:"]:before {
+    content: "✉\0000A0";
+}
+
+.Footer {
+    margin-top: 2em;
+    padding: 0.5em;
+    clear: both;
+    color: black;
+    background-color: #EEE;
+    border-top: thin black solid;
+}
+
+.Summary {
+    padding: 10px;
+    font-weight: bold;
+}
+
+a:hover {
+    background: #FFB !important;
+}
+
+.Breadcrumb {
+    text-align: left;
+    color: #000;
+    background: #EEE;
+    padding: 5px;
+    margin-top: 0px;
+    border-top: #000 solid 1px;
+    border-bottom: #000 solid 1px;
+}
